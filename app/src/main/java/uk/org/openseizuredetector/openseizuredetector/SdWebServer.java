@@ -1,15 +1,12 @@
-/*
-  OpenSeizureDetector - SdWebServer.java
-  Integral en_GB Version - Graham-Compatible
-  Uses the manual Response constructor found in the local NanoHTTPD module.
-*/
-
 package uk.org.openseizuredetector.openseizuredetector;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+
+import androidx.preference.PreferenceManager;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -20,15 +17,11 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
-// Importeer de lokale NanoHTTPD klasse uit de root module
 import fi.iki.elonen.NanoHTTPD;
 
-/**
- * Web Server tailored for the OpenSeizureDetector local module.
- * Direct constructor calls are used for maximum compatibility.
- */
 public class SdWebServer extends NanoHTTPD {
     private final String TAG = "SdWebServer";
     private SdData mSdData;
@@ -37,7 +30,7 @@ public class SdWebServer extends NanoHTTPD {
     private final OsdUtil mUtil;
 
     public SdWebServer(Context context, SdData sdData, SdServer sdServer) {
-        // Graham's port 8080
+        // Bind aan 0.0.0.0 om bereikbaar te zijn voor alle interfaces (inclusief SSH tunnel)
         super(8080);
         this.mSdData = sdData;
         this.mContext = context;
@@ -71,7 +64,7 @@ public class SdWebServer extends NanoHTTPD {
                 case "/data":
                     return handleData(method, session.getParms(), files);
                 case "/settings":
-                    return handleSettings(method);
+                    return handleSettings(method, session.getParms(), files);
                 case "/spectrum":
                     return handleSpectrum();
                 case "/acceptalarm":
@@ -89,34 +82,56 @@ public class SdWebServer extends NanoHTTPD {
         }
     }
 
-    /* --- DATA & LOGIC --- */
-
     private Response handleData(Method method, Map<String, String> params, Map<String, String> files) {
         if (Method.GET.equals(method)) {
-            return createJsonResponse(mSdData.toString());
+            return createJsonResponse(mSdData.toJson().toString());
         } else if (Method.POST.equals(method)) {
             String raw = params.containsKey("dataObj") ? params.get("dataObj") : files.get("postData");
-            if (raw != null && mSdServer.mSdDataSource != null) {
-                // 1. Convert the raw String from the web request into a JSONObject
+            if (raw != null) {
                 try {
                     JSONObject jsonRaw = new JSONObject(raw);
-
-                    // 2. Pass the JSONObject to the data container for processing
-                    mSdServer.mSdDataSource.mSdData.updateFromJSON(jsonRaw);
-
+                    mSdServer.mSdData.updateFromJSON(jsonRaw);
+                    return createJsonResponse(mSdServer.mSdData.toJson().toString());
                 } catch (JSONException e) {
-                    Log.e(TAG, "updateFromJSON: Invalid JSON string received - " + raw);
+                    Log.e(TAG, "updateFromJSON Error: " + e.getMessage());
                 }
-
-                // 3. Generate the response using the newly updated data object
-                return createJsonResponse(mSdServer.mSdDataSource.mSdData.toJson().toString());
             }
         }
         return new Response(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Bad Request");
     }
 
-    private Response handleSettings(Method method) {
-        return createJsonResponse(mSdData.toSettingsJSON());
+    private Response handleSettings(Method method, Map<String, String> params, Map<String, String> files) {
+        if (Method.GET.equals(method)) {
+            return createJsonResponse(mSdData.toSettingsJSON());
+        } else if (Method.POST.equals(method)) {
+            String raw = params.containsKey("settingsObj") ? params.get("settingsObj") : files.get("postData");
+            if (raw != null) {
+                try {
+                    JSONObject json = new JSONObject(raw);
+                    if (json.has("OsdSettings")) {
+                        json = json.getJSONObject("OsdSettings");
+                    }
+                    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
+                    SharedPreferences.Editor editor = prefs.edit();
+                    Iterator<String> keys = json.keys();
+                    while(keys.hasNext()) {
+                        String key = keys.next();
+                        Object val = json.get(key);
+                        if (val instanceof Boolean) editor.putBoolean(key, (Boolean)val);
+                        else if (val instanceof Integer) editor.putInt(key, (Integer)val);
+                        else if (val instanceof Double) editor.putFloat(key, ((Double)val).floatValue());
+                        else if (val instanceof Float) editor.putFloat(key, (Float)val);
+                        else if (val instanceof Long) editor.putLong(key, (Long)val);
+                        else if (val instanceof String) editor.putString(key, (String)val);
+                    }
+                    editor.apply();
+                    return createJsonResponse("{\"status\": \"OK\", \"message\": \"Settings Profile Applied\"}");
+                } catch (JSONException e) {
+                    return createJsonResponse("{\"status\": \"ERROR\", \"message\": \"" + e.getMessage() + "\"}");
+                }
+            }
+        }
+        return new Response(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Bad Request");
     }
 
     private Response handleSpectrum() {
@@ -132,8 +147,6 @@ public class SdWebServer extends NanoHTTPD {
             return createJsonResponse("{\"error\": \"Spectrum Error\"}");
         }
     }
-
-    /* --- FILE SERVING --- */
 
     private Response serveLogList() {
         try {
@@ -155,7 +168,6 @@ public class SdWebServer extends NanoHTTPD {
             String fname = uri.replace("/logs/", "");
             File file = new File(mUtil.getDataStorageDir(), fname);
             if (file.exists()) {
-                // Manual Response constructor for Graham's module
                 return new Response(Response.Status.OK, "text/plain", new FileInputStream(file));
             }
         } catch (Exception e) {
@@ -173,8 +185,6 @@ public class SdWebServer extends NanoHTTPD {
             return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Asset Not Found");
         }
     }
-
-    /* --- UTILS --- */
 
     private Response createJsonResponse(String json) {
         Response res = new Response(Response.Status.OK, "application/json", json);

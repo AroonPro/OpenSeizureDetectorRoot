@@ -34,7 +34,8 @@ public class SdDataSourceNetwork extends SdDataSource {
     private int mDataUpdatePeriod = 2000;
     private int mConnectTimeoutPeriod = 5000;
     private int mReadTimeoutPeriod = 5000;
-    private String mServerIP = "unknown";
+    private String mServerIP = "192.168.1.175";
+    private int mServerPort = 8080;
 
     private int ALARM_STATE_NETFAULT = 7;
 
@@ -113,7 +114,15 @@ public class SdDataSourceNetwork extends SdDataSource {
         SharedPreferences SP = PreferenceManager
                 .getDefaultSharedPreferences(mContext);
         mServerIP = SP.getString("ServerIP", "192.168.1.175");
-        Log.v(TAG, "updatePrefs() - mServerIP = " + mServerIP);
+        
+        try {
+            String serverPortStr = SP.getString("ServerPort", "8080");
+            mServerPort = Integer.parseInt(serverPortStr);
+        } catch (Exception e) {
+            mServerPort = 8080;
+        }
+
+        Log.v(TAG, "updatePrefs() - mServerIP = " + mServerIP + ":" + mServerPort);
         try {
             String dataUpdatePeriodStr = SP.getString("DataUpdatePeriod", "2000");
             mDataUpdatePeriod = Integer.parseInt(dataUpdatePeriodStr);
@@ -146,7 +155,7 @@ public class SdDataSourceNetwork extends SdDataSource {
      */
     public void downloadSdData() {
         Log.v(TAG, "downloadSdData()");
-        new DownloadSdDataTask().execute("http://" + mServerIP + ":8080/data");
+        new DownloadSdDataTask().execute("http://" + mServerIP + ":" + mServerPort + "/data");
     }
 
     /**

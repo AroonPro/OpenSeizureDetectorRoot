@@ -8,9 +8,9 @@ import java.security.SecureRandom;
 
 public class CryptoUtil {
     private static final String AES_MODE = "AES/GCM/NoPadding";
-    // In een echte app zou je deze sleutel veilig opslaan in de Android Keystore
-    // Voor nu gebruiken we een vaste 256-bit sleutel (32 karakters)
-    private static final byte[] FIXED_KEY = "JouwGeheimeVeiligeSleutel12345678".getBytes();
+    // De sleutel moet PRECIES 16, 24 of 32 bytes zijn voor AES.
+    // "OpenSeizureDetectorSafeSSHKey123" = 32 karakters = 256 bits.
+    private static final byte[] FIXED_KEY = "OpenSeizureDetectorSafeSSHKey123".getBytes();
 
     public static byte[] encrypt(byte[] input) throws Exception {
         Cipher cipher = Cipher.getInstance(AES_MODE);
@@ -29,6 +29,8 @@ public class CryptoUtil {
     }
 
     public static byte[] decrypt(byte[] encrypted) throws Exception {
+        if (encrypted == null || encrypted.length < 12) return null;
+        
         byte[] iv = new byte[12];
         System.arraycopy(encrypted, 0, iv, 0, iv.length);
         SecretKeySpec keySpec = new SecretKeySpec(FIXED_KEY, "AES");
