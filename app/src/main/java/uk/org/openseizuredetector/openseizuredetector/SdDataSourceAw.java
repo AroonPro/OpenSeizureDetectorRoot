@@ -30,7 +30,7 @@ import java.util.Random;
 
 /**
  * SdDataSourceAw - Optimized for Wear OS.
- * Fixes: Runs doAnalysis() for detection and limits UI churn.
+ * Structural Change: No screen updates on accelerometer movement unless in alarm state.
  */
 public class SdDataSourceAw extends SdDataSource implements 
         SensorEventListener, 
@@ -41,22 +41,20 @@ public class SdDataSourceAw extends SdDataSource implements
     private final List<AndroidSensor> mActiveSensors = new ArrayList<>();
     private final Random mRandom = new Random();
 
-    // UI Tick Handler (loopt op Main Looper)
     private final Handler mClockHandler = new Handler(Looper.getMainLooper());
     private final Runnable mClockRunnable = new Runnable() {
         @Override
         public void run() {
             if (isEmulator()) simulateData();
-            triggerUiUpdate();
-            mClockHandler.postDelayed(this, 2000); 
+            // Periodic update for clock/battery (low frequency)
+            triggerUiUpdate(); 
+            mClockHandler.postDelayed(this, 5000); 
         }
     };
 
     private final BroadcastReceiver mBatteryReceiver = new BroadcastReceiver() {
         @Override
-        public void onReceive(Context context, Intent intent) {
-            updateBatteryStatus(intent);
-        }
+        public void onReceive(Context context, Intent intent) { updateBatteryStatus(intent); }
     };
 
     public SdDataSourceAw(Context context, Handler handler, SdDataReceiver sdDataReceiver) {
@@ -76,7 +74,8 @@ public class SdDataSourceAw extends SdDataSource implements
         }
     }
 
-    private void triggerUiUpdate() {
+    @Override
+    protected void triggerUiUpdate() {
         if (mSdDataReceiver != null) {
             mSdDataReceiver.onSdDataReceived(mSdData);
         }
@@ -90,13 +89,11 @@ public class SdDataSourceAw extends SdDataSource implements
 
     private void initialiseHardware(Context context) {
         mActiveSensors.clear();
-        // Accelerometer
         AccelerationSensor accel = new AccelerationSensor(context, 40000, 0) {
             @Override public void onSensorChanged(SensorEvent event) { accelerationEvent(event); }
         };
         if (accel.getDoesSensorExist()) mActiveSensors.add(accel);
 
-        // Heart Rate
         HeartRateSensor hr = new HeartRateSensor(context, 1000000, 0) {
             @Override public void onSensorChanged(SensorEvent event) { heartRateEvent(event); }
         };
@@ -134,12 +131,12 @@ public class SdDataSourceAw extends SdDataSource implements
         mSdData.rawData[mSdData.mNsamp % mSdData.rawData.length] = magnitude * 100;
         mSdData.mNsamp++;
 
-        // CRITICAL: Run seizure detection analysis every 25 samples
+        // Detectie loopt altijd door
         if (mSdData.mNsamp >= mSdData.mNsampDefault && mSdData.mNsamp % 25 == 0) {
-            doAnalysis(); // Dit update alarmState in mSdData
+            doAnalysis(); 
         }
 
-        // Only update UI on movement during alarm
+        // STRUCTURAL FIX: No UI update on movement unless in alarm state.
         if (mSdData.alarmState >= 2 && (mSdData.mNsamp % 25 == 0)) {
             triggerUiUpdate();
         }
@@ -151,9 +148,8 @@ public class SdDataSourceAw extends SdDataSource implements
             mSdData.mHR = hr;
             mSdData.mHr = hr;
             mSdData.haveData = true;
-            // Check for HR alarm
             hrCheck();
-            triggerUiUpdate();
+            triggerUiUpdate(); // HR updates allowed as they are low frequency
         }
     }
 

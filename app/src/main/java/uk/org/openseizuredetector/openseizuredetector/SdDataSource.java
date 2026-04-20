@@ -97,13 +97,20 @@ public abstract class SdDataSource extends Service {
     }
 
     public void updateFromJSON(String jsonStr) { if (mSdData != null) mSdData.fromJSON(jsonStr); }
-    
-    // VISIBILITY PROTECTED: Mandatory to match legacy subclasses
-    protected void muteCheck() {}
+
+    protected void triggerUiUpdate() {
+        if (mSdDataReceiver != null) {
+            mSdDataReceiver.onSdDataReceived(mSdData);
+        }
+    }
+
+    // Methods needed by subclasses to override
+    public void muteCheck() {}
     protected void faultCheck() {}
-    protected void handleSendingHelp() {}
-    protected void fallCheck() {}
-    
+    public void handleSendingHelp() {}
+    public void fallCheck() {}
+    public void o2SatCheck() {}
+
     protected void hrCheck() {
         if (mSdData == null || mSdData.mHr <= 0) {
             mHrAlarmCount = 0;
@@ -115,70 +122,34 @@ public abstract class SdDataSource extends Service {
                 if (mSdData.mO2Sat > 0 && mSdData.mO2Sat < mSdData.mO2SatThreshMin) {
                     mSdData.alarmState = 2;
                     mSdData.alarmPhrase = "HR/O2 CRITICAL";
-                    mSdData.alarmCause = "HR/O2";
                 } else if (mSdData.alarmState < 1) {
                     mSdData.alarmState = 1;
                     mSdData.alarmPhrase = "WARNING: High HR";
-                    mSdData.alarmCause = "HR";
                 }
             }
-        } else {
-            if (mHrAlarmCount > 0) mHrAlarmCount--;
-        }
-    }
-
-    protected void o2SatCheck() {
-        if (mSdData == null || mSdData.mO2Sat <= 0 || mSdData.mO2Sat > 100) {
-            mO2AlarmCount = 0;
-            return;
-        }
-        if (mSdData.mO2Sat < mSdData.mO2SatThreshMin) {
-            mO2AlarmCount++;
-            if (mO2AlarmCount >= O2_ALARM_COUNT_MAX) {
-                mSdData.alarmState = 2;
-                mSdData.alarmPhrase = "O2 CRITICAL: " + (int)mSdData.mO2Sat + "%";
-                mSdData.alarmCause = "SpO2";
-            }
-        } else {
-            if (mO2AlarmCount > 0) mO2AlarmCount--;
-        }
+        } else if (mHrAlarmCount > 0) mHrAlarmCount--;
     }
 
     protected void checkAlarm() {
         if (mSdData == null) return;
-        
         hrCheck();
         o2SatCheck();
-        fallCheck();
-
+        
         if (mSdData.roiPower >= mAlarmThresh && mSdData.roiRatio >= mAlarmRatioThresh) {
-            if (mSdData.mO2Sat > 94) {
-                if (mAlarmCount < mAlarmCountThreshold) {
-                    mAlarmCount++;
-                    mSdData.alarmState = Math.max(mSdData.alarmState, 1);
-                    mSdData.alarmPhrase = "High Activity (Safe)";
-                    return;
-                }
-            }
             mAlarmCount++;
             if (mAlarmCount >= mAlarmCountThreshold) {
                 mSdData.alarmState = 2;
                 mSdData.alarmPhrase = "SEIZURE DETECTED";
-                mSdData.alarmCause = "Tremor";
             } else {
                 mSdData.alarmState = Math.max(mSdData.alarmState, 1);
                 mSdData.alarmPhrase = "WARNING: Tremor";
-                mSdData.alarmCause = "Tremor";
             }
-        } else {
-            if (mAlarmCount > 0) mAlarmCount--;
-        }
+        } else if (mAlarmCount > 0) mAlarmCount--;
 
         if (mAlarmCount == 0 && mHrAlarmCount == 0 && mO2AlarmCount == 0) {
             if (mSdData.alarmState != 0) {
                 mSdData.alarmState = 0;
                 mSdData.alarmPhrase = "";
-                mSdData.alarmCause = "";
             }
         }
     }
@@ -210,14 +181,9 @@ public abstract class SdDataSource extends Service {
     }
 
     public void ClearAlarmCount() {
-        mAlarmCount = 0;
-        mHrAlarmCount = 0;
-        mO2AlarmCount = 0;
-        if (mSdData != null) {
-            mSdData.alarmState = 0;
-            mSdData.alarmPhrase = "";
-            mSdData.alarmCause = "";
-        }
+        mAlarmCount = 0; mHrAlarmCount = 0; mO2AlarmCount = 0;
+        if (mSdData != null) { mSdData.alarmState = 0; mSdData.alarmPhrase = ""; }
+        triggerUiUpdate();
     }
 
     protected abstract void getStatus();
