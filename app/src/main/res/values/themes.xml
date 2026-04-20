@@ -1,20 +1,15 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Theme.OpenSeizureDetector" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- Base application theme.
+         Fixed: Using standard DeviceDefault parent to support both Wear and Phone modules. -->
+    <style name="Theme.OpenSeizureDetector" parent="android:Theme.DeviceDefault.NoActionBar">
         <!-- Primary brand color. -->
         <item name="colorPrimary">@color/purple_500</item>
-        <item name="colorOnPrimary">@color/white</item>
-        <item name="colorPrimaryContainer">@color/purple_200</item>
-        <item name="colorOnPrimaryContainer">@color/black</item>
-
-        <!-- Secondary brand color. -->
-        <item name="colorSecondary">@color/teal_200</item>
-        <item name="colorOnSecondary">@color/black</item>
-        <item name="colorSecondaryContainer">@color/teal_700</item>
-        <item name="colorOnSecondaryContainer">@color/white</item>
+        <item name="colorPrimaryDark">@color/purple_700</item>
+        <item name="colorAccent">@color/teal_200</item>
 
         <!-- Status bar color. -->
         <item name="android:statusBarColor" tools:targetApi="21">?attr/colorPrimary</item>
-        <!-- Customize your theme here. -->
+        <item name="android:windowBackground">@color/black</item>
+        <item name="android:textColorPrimary">@color/white</item>
     </style>
 </resources>

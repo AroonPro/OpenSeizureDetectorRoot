@@ -32,10 +32,11 @@ import javax.net.ssl.X509TrustManager;
 /**
  * SshClient - en_GB
  * Pure Service-Context SSH Manager. 
- * Handles manual tunnel configuration and background stability.
+ * Updated: Reads key from internal storage for better security/permissions.
  */
 public class SshClient {
     private static final String TAG = "SshClient";
+    private static final String KEY_FILENAME = "id_rsa_osd";
     private final Context mContext;
     private final RequestQueue mQueue;
     private final EncryptedSettingsManager mSettingsManager;
@@ -114,10 +115,11 @@ public class SshClient {
                 Log.i(TAG, "SSH: Connecting to " + cluster.host + " as " + cluster.user);
                 JSch jsch = new JSch();
                 
-                byte[] keyBytes = readRawFileBytes(SshKeyConfig.KEY_PATH);
-                if (keyBytes != null && keyBytes.length > 0) {
-                    jsch.addIdentity("osd_key", keyBytes, null, null);
-                    Log.i(TAG, "Loaded identity from file.");
+                // FIX: Look for internal key first
+                File internalKeyFile = new File(mContext.getFilesDir(), KEY_FILENAME);
+                if (internalKeyFile.exists()) {
+                    jsch.addIdentity(internalKeyFile.getAbsolutePath());
+                    Log.i(TAG, "Loaded internal identity file.");
                 } else if (cluster.ppk != null && !cluster.ppk.isEmpty()) {
                     jsch.addIdentity("osd_key", cluster.ppk.getBytes(StandardCharsets.UTF_8), null, null);
                     Log.i(TAG, "Loaded identity from database.");
@@ -126,18 +128,15 @@ public class SshClient {
                 mSession = jsch.getSession(cluster.user, cluster.host, cluster.port);
                 Properties config = new Properties();
                 config.put("StrictHostKeyChecking", "no");
-                // Mandatory for modern OpenSSH/Debian servers
                 config.put("PubkeyAcceptedAlgorithms", "rsa-sha2-256,rsa-sha2-512,ssh-rsa,ssh-ed25519");
                 mSession.setConfig(config);
                 mSession.setServerAliveInterval(30000);
                 mSession.connect(15000);
 
-                Log.i(TAG, "SSH: Session Established. Opening tunnels...");
+                Log.i(TAG, "SSH: Session Established.");
 
-                // Always ensure L8123 for webhooks
                 try { mSession.setPortForwardingL(8123, "127.0.0.1", 8123); } catch (Exception e) {}
 
-                // Process manual tunnels
                 if (cluster.tunnels != null) {
                     for (String tunnelStr : cluster.tunnels) {
                         try {
@@ -152,16 +151,13 @@ public class SshClient {
                                     mSession.setPortForwardingR(Integer.parseInt(p[0]), p[1], Integer.parseInt(p[2]));
                                 }
                             }
-                        } catch (Exception e) {
-                            Log.e(TAG, "Manual Tunnel Error: " + tunnelStr);
-                        }
+                        } catch (Exception e) { Log.e(TAG, "Manual Tunnel Error: " + tunnelStr); }
                     }
                 }
 
                 if (handler != null) {
                     handler.post(() -> {
                         if (callback != null) callback.onComplete(true, "Connected");
-                        // Trigger webhooks non-blocking
                         callWebhook("CONNECT", cluster.user, 8080, true, 2, null);
                     });
                 }
@@ -180,16 +176,5 @@ public class SshClient {
             mSession.disconnect();
             Log.i(TAG, "SSH Disconnected.");
         }
-    }
-
-    private byte[] readRawFileBytes(String path) {
-        if (path == null || path.isEmpty()) return null;
-        File file = new File(path);
-        if (!file.exists()) return null;
-        try (FileInputStream fis = new FileInputStream(file)) {
-            byte[] data = new byte[(int) file.length()];
-            fis.read(data);
-            return data;
-        } catch (IOException e) { return null; }
     }
 }

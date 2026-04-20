@@ -19,34 +19,49 @@ import com.google.common.util.concurrent.ListenableFuture;
 import java.util.concurrent.ExecutionException;
 
 /**
- * HealthServicesManager - Monitors user activity (Sport Mode) using Wear OS Health Services.
+ * HealthServicesManager - Monitors user activity (Sport Mode).
+ * Fixed: Robust checks for emulator/device compatibility to prevent startup crashes.
  */
 public class HealthServicesManager {
     private static final String TAG = "HealthServicesMgr";
-    private final ExerciseClient mExerciseClient;
+    private ExerciseClient mExerciseClient;
     private final SdData mSdData;
 
     public HealthServicesManager(Context context, SdData sdData) {
-        mExerciseClient = HealthServices.getClient(context).getExerciseClient();
         mSdData = sdData;
+        try {
+            mExerciseClient = HealthServices.getClient(context).getExerciseClient();
+        } catch (Exception e) {
+            Log.e(TAG, "Health Services not available on this device: " + e.getMessage());
+            mExerciseClient = null;
+        }
     }
 
     public void startMonitoring() {
-        Log.i(TAG, "Monitoring user activity...");
-        mExerciseClient.setUpdateCallback(mCallback);
-        checkCurrentExercise();
-    }
-
-    public void triggerManualSpO2Measurement() {
-        Log.d(TAG, "Manual SpO2 measurement request received (Samsung SDK/Hardware prioritized)");
-        // Actual measurement is triggered via the Samsung sensor in SdDataSourceAw
+        if (mExerciseClient == null) return;
+        
+        try {
+            Log.i(TAG, "Starting user activity monitoring...");
+            mExerciseClient.setUpdateCallback(mCallback);
+            checkCurrentExercise();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to start monitoring: " + e.getMessage());
+        }
     }
 
     public void stopMonitoring() {
-        mExerciseClient.clearUpdateCallbackAsync(mCallback);
+        if (mExerciseClient != null) {
+            try {
+                mExerciseClient.clearUpdateCallbackAsync(mCallback);
+            } catch (Exception e) {
+                Log.e(TAG, "Error stopping monitoring: " + e.getMessage());
+            }
+        }
     }
 
     private void checkCurrentExercise() {
+        if (mExerciseClient == null) return;
+
         ListenableFuture<ExerciseInfo> future = mExerciseClient.getCurrentExerciseInfoAsync();
         future.addListener(() -> {
             try {
@@ -71,7 +86,11 @@ public class HealthServicesManager {
 
         @Override public void onLapSummaryReceived(@NonNull ExerciseLapSummary lapSummary) {}
         @Override public void onAvailabilityChanged(@NonNull DataType<?, ?> dataType, @NonNull Availability availability) {}
-        @Override public void onRegistrationFailed(@NonNull Throwable throwable) {}
-        @Override public void onRegistered() {}
+        @Override public void onRegistrationFailed(@NonNull Throwable throwable) {
+            Log.e(TAG, "Health Services registration failed: " + throwable.getMessage());
+        }
+        @Override public void onRegistered() {
+            Log.i(TAG, "Health Services callback registered.");
+        }
     };
 }
