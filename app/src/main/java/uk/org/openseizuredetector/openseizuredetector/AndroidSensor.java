@@ -5,11 +5,13 @@ import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.os.Build;
 import android.util.Log;
 
 /**
  * AndroidSensor - en_GB
  * Unified base class for OSD wearable sensors.
+ * Updated: Supports Privacy Attribution Tags for SDK 31+.
  */
 abstract class AndroidSensor implements SensorEventListener {
 
@@ -28,13 +30,20 @@ abstract class AndroidSensor implements SensorEventListener {
                          int sensorSamplingPeriodUs, int sensorMaxReportLatencyUs) {
         String className = this.getClass().getSimpleName();
         this.TAG = (className.isEmpty()) ? "OSD_Sensor_Anon" : className;
-        this.mContext = context;
+        
+        // Architecture Fix: Apply Privacy Attribution for OSD Sensors
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            this.mContext = context.createAttributionContext("osd_sensors");
+        } else {
+            this.mContext = context;
+        }
+
         this.mSensorFeature = sensorFeature;
         this.mSensorType = sensorType;
         this.mSensorSamplingPeriodUs = sensorSamplingPeriodUs;
         this.mSensorMaxReportLatencyUs = sensorMaxReportLatencyUs;
 
-        mSensorManager = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
+        mSensorManager = (SensorManager) mContext.getSystemService(Context.SENSOR_SERVICE);
         if (mSensorManager != null) {
             mSensor = mSensorManager.getDefaultSensor(mSensorType);
         }

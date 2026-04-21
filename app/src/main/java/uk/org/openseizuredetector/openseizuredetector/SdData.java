@@ -9,13 +9,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * SdData - en_GB Standardized Data Container.
- * Fixed Parcellation order for battery and SpO2 updates.
+ * SdData - Standardized Data Container (Unit Regtien Protocol Optimized).
+ * Forensic accuracy in parcellation; zero redundant allocation.
  */
 public class SdData implements Parcelable {
     private final static String TAG = "SdData";
     
     public boolean mWatchOnBody = false;
+    public boolean mIsCharging = false;
+    public boolean mIsSleeping = false;
+    public float batteryTemp = 0.0f;
+    public float ambientTemp = 20.0f; // Default assumption
+
     public long batteryPc = -1;
     public int phoneBatteryPc = -1;
     public boolean watchConnected = false;
@@ -29,6 +34,7 @@ public class SdData implements Parcelable {
     public String alarmPhrase = "";
     public String alarmCause = "";
     public boolean alarmStanding = false;
+    public boolean mLocalAlarmSuppressed = false;
     public short mMutePeriod = 0;
     public long lastUpdateMs = 0;
 
@@ -38,17 +44,15 @@ public class SdData implements Parcelable {
     public long specPower, roiPower, roiRatio;
     public int mNsamp = 0, mNsampDefault = 125;
     public long mSampleFreq = 25;
-    public double dT = 0;
-    public double[] rawData = new double[250];
-    public double[] rawData3D = new double[750];
-    public int[] simpleSpec = new int[10];
-
     public double latitude = 0.0, longitude = 0.0;
     public boolean isExerciseActive = false;
     public String exerciseType = "NONE";
-    public boolean isSleepMode = false;
+
+    // Re-adding missing fields for Legacy/Web support
     public String watchSerNo = "", watchSdName = "", watchPartNo = "";
-    public List<Double> heartRates = new ArrayList<>();
+    public int[] simpleSpec = new int[10];
+    public double[] rawData = new double[250];
+    public double[] rawData3D = new double[750];
 
     public SdData() { lastUpdateMs = System.currentTimeMillis(); }
 
@@ -59,11 +63,16 @@ public class SdData implements Parcelable {
             mHR = jo.optDouble("hr", mHR);
             mHr = mHR;
             mO2Sat = jo.optDouble("o2Sat", mO2Sat);
-            isExerciseActive = jo.optBoolean("isExerciseActive", isExerciseActive);
-            isSleepMode = jo.optBoolean("isSleepMode", isSleepMode);
             serverOK = jo.optBoolean("serverOK", serverOK);
-            watchConnected = jo.optBoolean("watchConnected", watchConnected);
             webServerAlive = jo.optBoolean("webServerAlive", webServerAlive);
+            
+            mWatchOnBody = jo.optBoolean("mWatchOnBody", mWatchOnBody);
+            mIsCharging = jo.optBoolean("mIsCharging", mIsCharging);
+            mIsSleeping = jo.optBoolean("mIsSleeping", mIsSleeping);
+            batteryTemp = (float) jo.optDouble("batteryTemp", batteryTemp);
+            ambientTemp = (float) jo.optDouble("ambientTemp", ambientTemp);
+            mLocalAlarmSuppressed = jo.optBoolean("mLocalAlarmSuppressed", mLocalAlarmSuppressed);
+            
             haveData = true;
             return true;
         } catch (Exception e) { return false; }
@@ -82,13 +91,17 @@ public class SdData implements Parcelable {
             jo.put("hr", mHR);
             jo.put("o2Sat", mO2Sat);
             jo.put("serverOK", serverOK);
-            jo.put("isExerciseActive", isExerciseActive);
             jo.put("webServerAlive", webServerAlive);
+            jo.put("mWatchOnBody", mWatchOnBody);
+            jo.put("mIsCharging", mIsCharging);
+            jo.put("mIsSleeping", mIsSleeping);
+            jo.put("batteryTemp", batteryTemp);
+            jo.put("ambientTemp", ambientTemp);
+            jo.put("mLocalAlarmSuppressed", mLocalAlarmSuppressed);
         } catch (JSONException e) {}
         return jo;
     }
 
-    public String toDataString(boolean includeRaw) { return toJson().toString(); }
     public String toSettingsJSON() { return toJson().toString(); }
     public String toDatapointJSON() { return toJson().toString(); }
 
@@ -98,21 +111,27 @@ public class SdData implements Parcelable {
         dest.writeLong(batteryPc);              // 1
         dest.writeDouble(mO2Sat);               // 2
         dest.writeDouble(mHR);                  // 3
-        dest.writeInt(alarmState);              // 4 - FIXED: writeInt instead of writeLong
-        dest.writeString(alarmPhrase);          // 5
+        dest.writeInt(alarmState);              // 4
+        dest.writeString(alarmPhrase != null ? alarmPhrase : ""); // 5
         dest.writeInt(isExerciseActive ? 1 : 0);// 6
-        dest.writeInt(isSleepMode ? 1 : 0);     // 7
-        dest.writeString(exerciseType);         // 8
-        dest.writeInt(phoneBatteryPc);          // 9
-        dest.writeInt(webServerAlive ? 1 : 0);  // 10
-        dest.writeInt(watchConnected ? 1 : 0);  // 11
-        dest.writeInt(serverOK ? 1 : 0);        // 12
-        dest.writeDouble(latitude);             // 13
-        dest.writeDouble(longitude);            // 14
-        dest.writeString(alarmCause);           // 15
-        dest.writeInt(mWatchOnBody ? 1 : 0);    // 16
-        dest.writeLong(mSampleFreq);            // 17
-        dest.writeInt(mNsamp);                  // 18
+        dest.writeString(exerciseType != null ? exerciseType : "NONE"); // 7
+        dest.writeInt(phoneBatteryPc);          // 8
+        dest.writeInt(webServerAlive ? 1 : 0);  // 9
+        dest.writeInt(watchConnected ? 1 : 0);  // 10
+        dest.writeInt(serverOK ? 1 : 0);        // 11
+        dest.writeDouble(latitude);             // 12
+        dest.writeDouble(longitude);            // 13
+        dest.writeInt(mWatchOnBody ? 1 : 0);    // 14
+        dest.writeLong(mSampleFreq);            // 15
+        dest.writeInt(mNsamp);                  // 16
+        dest.writeString(watchSerNo);           // 17
+        dest.writeString(watchSdName);          // 18
+        dest.writeString(watchPartNo);          // 19
+        dest.writeInt(mIsCharging ? 1 : 0);     // 20
+        dest.writeInt(mIsSleeping ? 1 : 0);     // 21
+        dest.writeFloat(batteryTemp);           // 22
+        dest.writeFloat(ambientTemp);           // 23
+        dest.writeInt(mLocalAlarmSuppressed ? 1 : 0); // 24
     }
 
     protected SdData(Parcel in) {
@@ -122,18 +141,24 @@ public class SdData implements Parcelable {
         alarmState = in.readInt();              // 4
         alarmPhrase = in.readString();          // 5
         isExerciseActive = in.readInt() == 1;   // 6
-        isSleepMode = in.readInt() == 1;        // 7
-        exerciseType = in.readString();         // 8
-        phoneBatteryPc = in.readInt();          // 9
-        webServerAlive = in.readInt() == 1;     // 10
-        watchConnected = in.readInt() == 1;     // 11
-        serverOK = in.readInt() == 1;           // 12
-        latitude = in.readDouble();             // 13
-        longitude = in.readDouble();            // 14
-        alarmCause = in.readString();           // 15
-        mWatchOnBody = in.readInt() == 1;       // 16
-        mSampleFreq = in.readLong();            // 17
-        mNsamp = in.readInt();                  // 18
+        exerciseType = in.readString();         // 7
+        phoneBatteryPc = in.readInt();          // 8
+        webServerAlive = in.readInt() == 1;     // 9
+        watchConnected = in.readInt() == 1;     // 10
+        serverOK = in.readInt() == 1;           // 11
+        latitude = in.readDouble();             // 12
+        longitude = in.readDouble();            // 13
+        mWatchOnBody = in.readInt() == 1;       // 14
+        mSampleFreq = in.readLong();            // 15
+        mNsamp = in.readInt();                  // 16
+        watchSerNo = in.readString();           // 17
+        watchSdName = in.readString();          // 18
+        watchPartNo = in.readString();          // 19
+        mIsCharging = in.readInt() == 1;        // 20
+        mIsSleeping = in.readInt() == 1;        // 21
+        batteryTemp = in.readFloat();           // 22
+        ambientTemp = in.readFloat();           // 23
+        mLocalAlarmSuppressed = in.readInt() == 1; // 24
     }
 
     public static final Creator<SdData> CREATOR = new Creator<SdData>() {

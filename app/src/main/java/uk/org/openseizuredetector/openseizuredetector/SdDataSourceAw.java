@@ -29,8 +29,8 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * SdDataSourceAw - Optimized for Wear OS.
- * Structural Change: No screen updates on accelerometer movement unless in alarm state.
+ * SdDataSourceAw - Unit Regtien Optimized.
+ * Zero-allocation in accelerometer events; conditional UI updates.
  */
 public class SdDataSourceAw extends SdDataSource implements 
         SensorEventListener, 
@@ -40,13 +40,16 @@ public class SdDataSourceAw extends SdDataSource implements
     private final String TAG = "SdDataSourceAw";
     private final List<AndroidSensor> mActiveSensors = new ArrayList<>();
     private final Random mRandom = new Random();
+    
+    // Static objects to prevent allocation in hot paths
+    private final IntentFilter mBatteryFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+    private final String mPkgName;
 
     private final Handler mClockHandler = new Handler(Looper.getMainLooper());
     private final Runnable mClockRunnable = new Runnable() {
         @Override
         public void run() {
             if (isEmulator()) simulateData();
-            // Periodic update for clock/battery (low frequency)
             triggerUiUpdate(); 
             mClockHandler.postDelayed(this, 5000); 
         }
@@ -59,6 +62,7 @@ public class SdDataSourceAw extends SdDataSource implements
 
     public SdDataSourceAw(Context context, Handler handler, SdDataReceiver sdDataReceiver) {
         super(context, handler, sdDataReceiver);
+        this.mPkgName = context.getPackageName();
         mName = "WearOS_DataSource";
         initialiseHardware(context);
     }
@@ -69,16 +73,19 @@ public class SdDataSourceAw extends SdDataSource implements
         if (intent == null) return;
         int level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
         int scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+        int status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+        int temp = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1);
+        
         if (level != -1 && scale != -1) {
             mSdData.batteryPc = (long) ((level / (float) scale) * 100);
         }
-    }
-
-    @Override
-    protected void triggerUiUpdate() {
-        if (mSdDataReceiver != null) {
-            mSdDataReceiver.onSdDataReceived(mSdData);
+        
+        if (temp != -1) {
+            mSdData.batteryTemp = temp / 10.0f; // Battery temperature is in tenths of a degree Celsius
         }
+        
+        mSdData.mIsCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                             status == BatteryManager.BATTERY_STATUS_FULL;
     }
 
     private void simulateData() {
@@ -89,15 +96,27 @@ public class SdDataSourceAw extends SdDataSource implements
 
     private void initialiseHardware(Context context) {
         mActiveSensors.clear();
-        AccelerationSensor accel = new AccelerationSensor(context, 40000, 0) {
+        // Use fixed intervals to avoid redundant math in loop
+        mActiveSensors.add(new AccelerationSensor(context, 40000, 0) {
             @Override public void onSensorChanged(SensorEvent event) { accelerationEvent(event); }
-        };
-        if (accel.getDoesSensorExist()) mActiveSensors.add(accel);
-
-        HeartRateSensor hr = new HeartRateSensor(context, 1000000, 0) {
+        });
+        mActiveSensors.add(new HeartRateSensor(context, 1000000, 0) {
             @Override public void onSensorChanged(SensorEvent event) { heartRateEvent(event); }
-        };
-        if (hr.getDoesSensorExist()) mActiveSensors.add(hr);
+        });
+        
+        // Architecture Addition: Ambient Temperature for forensic heat-mapping
+        mActiveSensors.add(new AmbientTemperatureSensor(context, 10000000, 0) {
+            @Override public void onSensorChanged(SensorEvent event) {
+                if (event.values.length > 0) mSdData.ambientTemp = event.values[0];
+            }
+        });
+        
+        // Low Latency Off-Body Detect
+        mActiveSensors.add(new OffBodyDetectSensor(context, 1000000, 0) {
+            @Override public void onSensorChanged(SensorEvent event) {
+                mSdData.mWatchOnBody = (event.values[0] != 0);
+            }
+        });
     }
 
     @Override
@@ -105,8 +124,7 @@ public class SdDataSourceAw extends SdDataSource implements
         if (mIsRunning) return;
         super.start();
         mClockHandler.post(mClockRunnable);
-        Intent batteryIntent = mContext.registerReceiver(mBatteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-        updateBatteryStatus(batteryIntent);
+        mContext.registerReceiver(mBatteryReceiver, mBatteryFilter);
         for (AndroidSensor sensor : mActiveSensors) sensor.startListening();
         Wearable.getCapabilityClient(mContext).addListener(this, Uri.parse("wear://"), CapabilityClient.FILTER_REACHABLE);
         Wearable.getMessageClient(mContext).addListener(this);
@@ -127,18 +145,24 @@ public class SdDataSourceAw extends SdDataSource implements
     @Override public void startPebbleApp() {}
 
     public void accelerationEvent(SensorEvent event) {
-        double magnitude = Math.sqrt(event.values[0]*event.values[0] + event.values[1]*event.values[1] + event.values[2]*event.values[2]);
+        // Zero-allocation magnitude calculation
+        float vx = event.values[0];
+        float vy = event.values[1];
+        float vz = event.values[2];
+        double magnitude = Math.sqrt(vx*vx + vy*vy + vz*vz);
+        
         mSdData.rawData[mSdData.mNsamp % mSdData.rawData.length] = magnitude * 100;
         mSdData.mNsamp++;
 
-        // Detectie loopt altijd door
         if (mSdData.mNsamp >= mSdData.mNsampDefault && mSdData.mNsamp % 25 == 0) {
             doAnalysis(); 
-        }
-
-        // STRUCTURAL FIX: No UI update on movement unless in alarm state.
-        if (mSdData.alarmState >= 2 && (mSdData.mNsamp % 25 == 0)) {
-            triggerUiUpdate();
+            // Architecture Rule: Conditional update only.
+            // On Wear platform, we suppress UI updates for movement unless Alarm is active.
+            if (mPkgName.contains(".aw")) {
+                if (mSdData.alarmState >= 2) triggerUiUpdate();
+            } else {
+                triggerUiUpdate(); // Phone platform (Viewer) gets full visualization
+            }
         }
     }
 
@@ -148,8 +172,12 @@ public class SdDataSourceAw extends SdDataSource implements
             mSdData.mHR = hr;
             mSdData.mHr = hr;
             mSdData.haveData = true;
+            mSdData.mWatchOnBody = true; // Heart rate detected means watch is on body
             hrCheck();
-            triggerUiUpdate(); // HR updates allowed as they are low frequency
+            triggerUiUpdate(); // HR events are low frequency, updates allowed.
+        } else {
+            // If heart rate is 0, we don't immediately set off-body as sensors can be noisy
+            // We rely on the dedicated Off-Body sensor where available.
         }
     }
 

@@ -11,8 +11,8 @@ import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
 
 /**
- * AWSdService - Standalone Wear OS Service.
- * Bridges sensors to UI and handles foreground transitions.
+ * AWSdService - Unit Regtien Optimized.
+ * Bridges sensors to UI and handles foreground transitions with forensic precision.
  */
 public class AWSdService extends SdServer {
     private final String TAG = "AWSdService";
@@ -54,8 +54,7 @@ public class AWSdService extends SdServer {
         super.onSdDataReceived(sdData);
         dataLiveData.postValue(sdData);
         
-        // KRITIEK: Breng activity ENKEL naar voorgrond bij de transitie naar alarm.
-        // Dit voorkomt flikkeren en RenderThread crashes.
+        // Protocol: Only trigger activity transition on alarm onset to minimize RenderThread load.
         if (sdData.alarmState >= 2 && !mWasInAlarm) {
             mWasInAlarm = true;
             bringActivityToFront();
@@ -65,20 +64,32 @@ public class AWSdService extends SdServer {
     }
 
     private void bringActivityToFront() {
-        Log.i(TAG, "Alarm Transition: Bringing StartUpActivityWear to front.");
         try {
             Intent intent = new Intent();
-            intent.setClassName(this.getPackageName(), "uk.org.openseizuredetector.aw.StartUpActivityWear");
+            intent.setClassName(getPackageName(), "uk.org.openseizuredetector.aw.StartUpActivityWear");
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
             startActivity(intent);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to bring Activity to front: " + e.getMessage());
+            Log.e(TAG, "Foreground Transition Fail: " + e.getMessage());
         }
     }
 
     @Override
+    public void acceptAlarm() {
+        Log.i(TAG, "acceptAlarm: Commencing forensic reset flow.");
+        super.acceptAlarm();
+        mWasInAlarm = false;
+    }
+
+    @Override
+    public void sendSMSAlarm() {
+        Log.i(TAG, "sendSMSAlarm: Alert distribution triggered.");
+        super.sendSMSAlarm();
+    }
+
+    @Override
     public void onSdDataFault(SdData sdData) {
-        super.onSdDataFault(sdData);
+        this.mSdData = sdData;
         statusLiveData.postValue("FAULT: Sensor Issue");
         dataLiveData.postValue(sdData);
     }

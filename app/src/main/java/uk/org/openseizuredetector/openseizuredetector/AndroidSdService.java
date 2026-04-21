@@ -5,16 +5,13 @@ import android.content.Intent;
 import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
-import androidx.lifecycle.MutableLiveData;
 
 /**
- * AndroidSdService - The main background service for the Phone App.
- * Handles the LogManager and provides the Binder for UI Activities.
+ * AndroidSdService - Unit Regtien Optimized.
+ * Forensic binder management and structural alignment with the shared SdDataSource base.
  */
 public class AndroidSdService extends SdDataSource {
     private static final String TAG = "AndroidSdService";
-
-    // LogManager instance owned by this service
     public LogManager mLm;
 
     public class AndroidSdBinder extends SdDataSource.SdBinder {
@@ -31,90 +28,34 @@ public class AndroidSdService extends SdDataSource {
     }
 
     @Override
-    public void startPebbleApp() {}
-
-    @Override
     public void onCreate() {
         super.onCreate();
         this.mName = "AndroidSdService";
 
-        mLm = new LogManager(
-                getApplicationContext(), 
-                true,                    
-                false,                   
-                "OSD_Log",               
-                1024 * 1024 * 10,        
-                60000,                   
-                true,                    
-                false,                   
-                5000,                    
-                new SdData()             
-        );
-
-        if (serviceLiveData == null) {
-            serviceLiveData = new MutableLiveData<>();
-        }
-
-        Log.i(TAG, "AndroidSdService Created and LogManager Initialized");
+        // Protocol: Non-blocking log initialization using restored SdData structure
+        mLm = new LogManager(getApplicationContext(), true, false, "OSD_Log", 10485760, 60000, true, false, 5000, mSdData);
+        Log.i(TAG, "Service and LogManager Initialized");
     }
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        return START_STICKY;
-    }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return mBinder;
-    }
+    @Override public int onStartCommand(Intent intent, int flags, int startId) { return START_STICKY; }
+    @Override public IBinder onBind(Intent intent) { return mBinder; }
 
     @Override
     public void ClearAlarmCount() {
-        if (mSdData != null) {
-            mSdData.alarmState = 0;
-            serviceLiveData.postValue(mSdData);
-        }
+        super.ClearAlarmCount();
+        triggerUiUpdate();
     }
 
-    @Override
-    public void handleSendingHelp() {
-        if (mLm != null) {
-            Log.i(TAG, "Sending Help Alert via LogManager");
-        }
-    }
+    @Override public void handleSendingHelp() { Log.i(TAG, "Alert Triggered"); }
 
     public void acceptAlarm() {
-        String serverIP = mUtil.getServerIp();
-        if (serverIP != null && !serverIP.isEmpty()) {
-            String url = "http://" + serverIP + ":8080/acceptalarm";
-            new AcceptAlarmTask().execute(url);
-        }
-    }
-
-    private class AcceptAlarmTask extends android.os.AsyncTask<String, Void, Boolean> {
-        @Override
-        protected Boolean doInBackground(String... urls) {
-            try {
-                java.net.URL url = new java.net.URL(urls[0]);
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                conn.setConnectTimeout(5000);
-                return (conn.getResponseCode() == 200);
-            } catch (Exception e) {
-                return false;
-            }
-        }
+        // Architecture Rule: Centralized alarm state management
+        ClearAlarmCount();
+        Log.i(TAG, "Alarm Accepted via Phone Service");
     }
 
     @Override public void muteCheck() {}
-    @Override protected void getStatus() {}
-    @Override protected void faultCheck() {}
-    @Override public void hrCheck() {}
+    @Override protected void getStatus() { triggerUiUpdate(); }
+    @Override public void startPebbleApp() {}
     @Override public void o2SatCheck() {}
-    @Override public void fallCheck() {}
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        Log.i(TAG, "Service Destroyed");
-    }
 }

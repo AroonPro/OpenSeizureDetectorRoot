@@ -8,47 +8,46 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
 
-import androidx.lifecycle.MutableLiveData;
-
 import java.util.Timer;
 import java.util.TimerTask;
 
 import org.jtransforms.fft.DoubleFFT_1D;
 
 /**
- * SdDataSource - Base Class
- * Harmonized to support both Modern (WearOS) and Legacy (Pebble/Garmin/Phone) sources.
+ * SdDataSource - Unit Regtien Optimized.
+ * Core analysis engine using Graham's rolling buffer to prevent index-overflows.
+ * Logic: Fixed-window FFT analysis (zero-allocation).
  */
 public abstract class SdDataSource extends Service {
     protected final String TAG = this.getClass().getSimpleName();
-    protected Context mContext;
-    protected Handler mHandler;
+    protected final Context mContext;
+    protected final Handler mHandler;
     protected static SdDataReceiver mSdDataReceiver;
-    protected OsdUtil mUtil;
+    protected final OsdUtil mUtil;
     public SdData mSdData;
     public String mName = "BaseSource";
 
-    public MutableLiveData<SdData> serviceLiveData = new MutableLiveData<>();
-    
     protected short mAlarmThresh = 15;
     protected short mAlarmRatioThresh = 4;
     protected int mAlarmCountThreshold = 10;
     protected int mAlarmCount = 0;
+    protected int mHrAlarmCount = 0;
+    protected int mO2AlarmCount = 0;
     
     protected int mHrAlarmThreshMax = 120;
-    protected int mHrAlarmCount = 0;
     protected final int HR_ALARM_COUNT_MAX = 10; 
-
-    protected int mO2AlarmCount = 0;
     protected final int O2_ALARM_COUNT_MAX = 5; 
 
-    private final int ACCEL_SCALE_FACTOR = 1000;
-
-    protected long mDataStatusTimeMillis;
+    private static final int ACCEL_SCALE_FACTOR = 1000;
     protected boolean mIsRunning = false;
     private Timer mStatusTimer;
 
+    // Architecture First: Rolling buffer for seismic data
+    protected final CircBuf mAccelBuffer = new CircBuf(250, -1.0);
+
+    // Reusable FFT buffers to eliminate GC pressure
     private DoubleFFT_1D mFft;
+    private double[] mFftBuffer;
     private int mLastN = -1;
 
     public class SdBinder extends Binder {
@@ -60,18 +59,12 @@ public abstract class SdDataSource extends Service {
         this.mHandler = handler;
         mSdDataReceiver = sdDataReceiver;
         this.mUtil = new OsdUtil(context, mHandler);
-        this.mSdData = pullSdData();
-    }
-
-    protected SdData pullSdData() {
-        if (mSdDataReceiver instanceof SdServer) return ((SdServer) mSdDataReceiver).mSdData;
-        return new SdData();
+        this.mSdData = (sdDataReceiver instanceof SdServer) ? ((SdServer) sdDataReceiver).mSdData : new SdData();
     }
 
     public void start() {
         updatePrefs();
         mIsRunning = true;
-        mDataStatusTimeMillis = System.currentTimeMillis();
         if (mStatusTimer == null) {
             mStatusTimer = new Timer();
             mStatusTimer.schedule(new TimerTask() {
@@ -90,54 +83,78 @@ public abstract class SdDataSource extends Service {
             mAlarmThresh = (short) mUtil.getPrefs().getInt("alarm_threshold", 15);
             mAlarmRatioThresh = (short) mUtil.getPrefs().getInt("alarm_ratio_threshold", 4);
             mHrAlarmThreshMax = mUtil.getPrefs().getInt("hr_alarm_threshold", 120);
-            if (mSdData != null) {
-                mSdData.mO2SatThreshMin = (double) mUtil.getPrefs().getInt("o2_threshold", 90);
-            }
+            if (mSdData != null) mSdData.mO2SatThreshMin = (double) mUtil.getPrefs().getInt("o2_threshold", 90);
         }
     }
 
-    public void updateFromJSON(String jsonStr) { if (mSdData != null) mSdData.fromJSON(jsonStr); }
+    public void updateFromJSON(String jsonStr) {
+        if (mSdData != null) {
+            mSdData.fromJSON(jsonStr);
+        }
+    }
 
     protected void triggerUiUpdate() {
-        if (mSdDataReceiver != null) {
-            mSdDataReceiver.onSdDataReceived(mSdData);
-        }
+        if (mSdDataReceiver != null) mSdDataReceiver.onSdDataReceived(mSdData);
     }
 
-    // Methods needed by subclasses to override
     public void muteCheck() {}
     protected void faultCheck() {}
     public void handleSendingHelp() {}
     public void fallCheck() {}
-    public void o2SatCheck() {}
 
-    protected void hrCheck() {
-        if (mSdData == null || mSdData.mHr <= 0) {
-            mHrAlarmCount = 0;
+    public void o2SatCheck() {
+        // OFF-BODY CHECK: Geen SpO2 analyse als watch niet om de pols zit
+        if (!mSdData.mWatchOnBody && !mSdData.mIsCharging) {
+            mO2AlarmCount = 0;
             return;
         }
+
+        if (mSdData == null || mSdData.mO2Sat <= 0) { mO2AlarmCount = 0; return; }
+        if (mSdData.mO2Sat < mSdData.mO2SatThreshMin) {
+            if (++mO2AlarmCount >= O2_ALARM_COUNT_MAX) {
+                mSdData.alarmState = 2;
+                mSdData.alarmPhrase = "O2 CRITICAL";
+            }
+        } else if (mO2AlarmCount > 0) mO2AlarmCount--;
+    }
+
+    protected void hrCheck() {
+        if (mSdData == null || mSdData.mHr <= 0) { mHrAlarmCount = 0; return; }
         if (mSdData.mHr >= mHrAlarmThreshMax) {
-            mHrAlarmCount++;
-            if (mHrAlarmCount >= HR_ALARM_COUNT_MAX) {
-                if (mSdData.mO2Sat > 0 && mSdData.mO2Sat < mSdData.mO2SatThreshMin) {
-                    mSdData.alarmState = 2;
-                    mSdData.alarmPhrase = "HR/O2 CRITICAL";
-                } else if (mSdData.alarmState < 1) {
-                    mSdData.alarmState = 1;
-                    mSdData.alarmPhrase = "WARNING: High HR";
-                }
+            if (++mHrAlarmCount >= HR_ALARM_COUNT_MAX) {
+                mSdData.alarmState = 1;
+                mSdData.alarmPhrase = "WARNING: High HR";
             }
         } else if (mHrAlarmCount > 0) mHrAlarmCount--;
     }
 
     protected void checkAlarm() {
         if (mSdData == null) return;
+        
+        // OFF-BODY CHECK: Geen alarm als watch niet om de pols zit, niet oplaadt en niet in slaap-profiel zit
+        if (!mSdData.mWatchOnBody && !mSdData.mIsCharging && !mSdData.mIsSleeping) {
+             mSdData.mLocalAlarmSuppressed = true; // Markeer dat alarm lokaal onderdrukt is
+             if (mSdData.alarmState != 0) {
+                 mSdData.alarmState = 0;
+                 mSdData.alarmPhrase = "OFF-BODY: Muted";
+             }
+             
+             // NACHTELIJK OFF-BODY (Noodgeval): Alarm voor ontvanger als batterij temp hoog is
+             if (mSdData.batteryTemp > mSdData.ambientTemp + 5.0f) {
+                 mSdData.alarmState = 2;
+                 mSdData.alarmPhrase = "NIGHT CRITICAL: Heat Detect";
+                 mSdData.mLocalAlarmSuppressed = false; // Forceer alarm naar ontvanger
+             }
+             return;
+        } else {
+             mSdData.mLocalAlarmSuppressed = false;
+        }
+
         hrCheck();
         o2SatCheck();
         
         if (mSdData.roiPower >= mAlarmThresh && mSdData.roiRatio >= mAlarmRatioThresh) {
-            mAlarmCount++;
-            if (mAlarmCount >= mAlarmCountThreshold) {
+            if (++mAlarmCount >= mAlarmCountThreshold) {
                 mSdData.alarmState = 2;
                 mSdData.alarmPhrase = "SEIZURE DETECTED";
             } else {
@@ -146,38 +163,51 @@ public abstract class SdDataSource extends Service {
             }
         } else if (mAlarmCount > 0) mAlarmCount--;
 
-        if (mAlarmCount == 0 && mHrAlarmCount == 0 && mO2AlarmCount == 0) {
-            if (mSdData.alarmState != 0) {
-                mSdData.alarmState = 0;
-                mSdData.alarmPhrase = "";
-            }
+        if (mAlarmCount == 0 && mHrAlarmCount == 0 && mO2AlarmCount == 0 && mSdData.alarmState != 0) {
+            mSdData.alarmState = 0;
+            mSdData.alarmPhrase = "";
         }
     }
 
     protected void doAnalysis() {
-        if (mSdData == null || mSdData.rawData == null || mSdData.mNsamp <= 0) return;
+        // OFF-BODY CHECK: Geen FFT analyse als watch niet om de pols zit
+        if (!mSdData.mWatchOnBody && !mSdData.mIsCharging) return;
+
+        // Architecture Fix: Analyze fixed window from rolling buffer
+        int n = mSdData.mNsampDefault;
+        if (mSdData == null || mAccelBuffer.getNumVals() < n) return;
+        
         try {
-            int n = mSdData.mNsamp;
-            if (n != mLastN) { mFft = new DoubleFFT_1D(n); mLastN = n; }
-            double[] fft = new double[n * 2];
-            System.arraycopy(mSdData.rawData, 0, fft, 0, n);
-            mFft.realForward(fft);
+            if (n != mLastN) {
+                mFft = new DoubleFFT_1D(n);
+                mFftBuffer = new double[n * 2];
+                mLastN = n;
+            }
+            
+            // Forensic Copy: Get last N samples from rolling buffer without allocation
+            mAccelBuffer.copyTo(mFftBuffer);
+            for(int i=n; i < mFftBuffer.length; i++) mFftBuffer[i] = 0; // Pad
+
+            mFft.realForward(mFftBuffer);
+            
             double specPower = 0, roiPower = 0;
-            double freqStep = (double)mSdData.mSampleFreq / (double)n;
+            final double freqStep = (double)mSdData.mSampleFreq / (double)n;
+            
             for (int i = 1; i < n / 2; i++) {
-                double freq = i * freqStep;
-                double power = (fft[2 * i] * fft[2 * i] + fft[2 * i + 1] * fft[2 * i + 1]);
+                double power = (mFftBuffer[2 * i] * mFftBuffer[2 * i] + mFftBuffer[2 * i + 1] * mFftBuffer[2 * i + 1]);
                 specPower += power;
+                double freq = i * freqStep;
                 if (freq >= 3.0 && freq <= 8.0) roiPower += power;
             }
-            specPower /= (n / 2.0);
-            roiPower /= (n / 2.0);
-            mSdData.specPower = (long) (specPower / ACCEL_SCALE_FACTOR);
-            mSdData.roiPower = (long) (roiPower / ACCEL_SCALE_FACTOR);
+            
+            double normN = n / 2.0;
+            mSdData.specPower = (long) ((specPower / normN) / ACCEL_SCALE_FACTOR);
+            mSdData.roiPower = (long) ((roiPower / normN) / ACCEL_SCALE_FACTOR);
             mSdData.roiRatio = (specPower > 0) ? (long) ((roiPower / specPower) * 100.0) : 0;
             mSdData.haveData = true;
+
             checkAlarm();
-        } catch (Exception e) { Log.e(TAG, "FFT Error: " + e.getMessage()); }
+        } catch (Exception e) { Log.e(TAG, "FFT Fault: " + e.getMessage()); }
     }
 
     public void ClearAlarmCount() {
