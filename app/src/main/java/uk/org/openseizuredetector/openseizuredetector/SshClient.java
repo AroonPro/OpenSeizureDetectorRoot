@@ -10,6 +10,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.HurlStack;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
+import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
 
@@ -27,17 +28,17 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
 /**
- * SshClient - Unit Regtien Optimized.
- * Forensic KEX alignment for modern OpenSSH (Raspberry Pi OS) compatibility.
+ * SshClient - en_GB
+ * Forensic KEX alignment with 2-Stage Connection logic for PID lock clearing.
+ * Unit Regtien Protocol: No R-tunnels on default, forced restart only.
  */
 public class SshClient {
     private static final String TAG = "SshClient";
     private static final String KEY_FILENAME = "id_rsa_osd";
     
-    // Protocol Constants: Prioritise ECDSA for Android/JSch stability
-    private static final String KEX_ALGS = "ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256";
-    private static final String HOST_KEY_ALGS = "ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,rsa-sha2-512,rsa-sha2-256";
-    private static final String PUBKEY_ALGS = "ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,rsa-sha2-512,rsa-sha2-256";
+    private static final String KEX_ALGS = "ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha256";
+    private static final String HOST_KEY_ALGS = "ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,rsa-sha2-512,rsa-sha2-256,ssh-rsa";
+    private static final String PUBKEY_ALGS = "ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,rsa-sha2-512,rsa-sha2-256,ssh-rsa";
 
     private final Context mContext;
     private final RequestQueue mQueue;
@@ -69,9 +70,13 @@ public class SshClient {
         }
     }
 
-    public void connectAndUploadConfig(final SshCluster cluster, final SshCallback callback) {
+    public void connectAndUploadConfig(final SshCluster cluster, final boolean forceRestartTunnels, final SshCallback callback) {
         new Thread(() -> {
             try {
+                if (forceRestartTunnels) {
+                    executeWebhook("RESTART", cluster.user);
+                }
+
                 Log.i(TAG, "SSH: Dialing " + cluster.host + " as user: " + cluster.user);
                 JSch jsch = new JSch();
                 
@@ -85,35 +90,60 @@ public class SshClient {
                 mSession = jsch.getSession(cluster.user, cluster.host, cluster.port);
                 Properties config = new Properties();
                 config.put("StrictHostKeyChecking", "no");
-                
-                // ARCHITECTURE FIX: Force ECDSA to avoid "verify: false" RSA-SHA2 issues in JSch 0.1.55
                 config.put("kex", KEX_ALGS);
                 config.put("server_host_key", HOST_KEY_ALGS);
                 config.put("PubkeyAcceptedAlgorithms", PUBKEY_ALGS);
                 config.put("PreferredAuthentications", "publickey,password,keyboard-interactive");
                 
-                // JSch internal: ensures it doesn't fall back to problematic ssh-rsa
-                config.put("CheckKex", "no");
-                
                 mSession.setConfig(config);
                 mSession.setServerAliveInterval(30000);
                 mSession.connect(15000);
 
-                Log.i(TAG, "SSH: Handshake and Authentication Success.");
+                Log.i(TAG, "SSH: Stage 1 - Session Connected.");
 
-                mSession.setPortForwardingL(8123, "127.0.0.1", 8123);
+                // Unit Regtien Stage 1: Forcefully clear remote port locks via SSH Exec
+                if (forceRestartTunnels && cluster.tunnels != null) {
+                    for (String t : cluster.tunnels) {
+                        if (t.startsWith("R")) {
+                            String remotePort = t.substring(1).split(":")[0];
+                            executeRemoteCommand("kill -9 $(lsof -t -i :" + remotePort + ") 2>/dev/null || true");
+                        }
+                    }
+                    Thread.sleep(1500); // Grace period for kernel port release
+                }
+
+                // Stage 2: Establish Tunnels
                 if (cluster.tunnels != null) {
-                    for (String t : cluster.tunnels) processTunnel(t);
+                    for (String t : cluster.tunnels) {
+                        if (t.startsWith("L")) {
+                            processTunnel(t);
+                        } else if (forceRestartTunnels && t.startsWith("R")) {
+                            processTunnel(t);
+                        }
+                    }
                 }
 
                 if (callback != null) callback.onComplete(true, "CONNECTED");
                 executeWebhook("CONNECT", cluster.user);
 
             } catch (Exception e) {
-                Log.e(TAG, "SSH Negotiation/Auth Failure: " + e.getMessage());
+                Log.e(TAG, "SSH 2-Stage Fail: " + e.getMessage());
                 if (callback != null) callback.onComplete(false, e.getMessage());
             }
         }).start();
+    }
+
+    private void executeRemoteCommand(String command) {
+        try {
+            Log.d(TAG, "Executing Stage 1 Kill: " + command);
+            ChannelExec channel = (ChannelExec) mSession.openChannel("exec");
+            channel.setCommand(command);
+            channel.connect();
+            while (!channel.isClosed()) { Thread.sleep(100); }
+            channel.disconnect();
+        } catch (Exception e) {
+            Log.e(TAG, "Stage 1 Remote Command Fail: " + e.getMessage());
+        }
     }
 
     private void processTunnel(String tunnelStr) {
@@ -145,6 +175,10 @@ public class SshClient {
             mSession.disconnect();
             mSession = null;
         }
+    }
+
+    public boolean isConnected() {
+        return mSession != null && mSession.isConnected();
     }
 
     public interface SshCallback { void onComplete(boolean success, String message); }

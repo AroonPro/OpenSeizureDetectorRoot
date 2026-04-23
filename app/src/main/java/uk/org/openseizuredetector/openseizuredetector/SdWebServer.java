@@ -30,7 +30,7 @@ public class SdWebServer extends NanoHTTPD {
     private final OsdUtil mUtil;
 
     public SdWebServer(Context context, SdData sdData, SdServer sdServer) {
-        // Bind aan 0.0.0.0 om bereikbaar te zijn voor alle interfaces (inclusief SSH tunnel)
+        // Unit Regtien: Listen on 8080, accessible via SSH tunnel (e.g. 28080 -> 8080)
         super(8080);
         this.mSdData = sdData;
         this.mContext = context;
@@ -74,6 +74,7 @@ public class SdWebServer extends NanoHTTPD {
                     return serveLogList();
                 default:
                     if (uri.startsWith("/logs/")) return serveLogFile(uri);
+                    if (uri.equals("/logfiles.html")) return serveAssetFile("/logfiles.html");
                     return serveAssetFile(uri);
             }
         } catch (Exception e) {
@@ -85,17 +86,6 @@ public class SdWebServer extends NanoHTTPD {
     private Response handleData(Method method, Map<String, String> params, Map<String, String> files) {
         if (Method.GET.equals(method)) {
             return createJsonResponse(mSdData.toJson().toString());
-        } else if (Method.POST.equals(method)) {
-            String raw = params.containsKey("dataObj") ? params.get("dataObj") : files.get("postData");
-            if (raw != null) {
-                try {
-                    JSONObject jsonRaw = new JSONObject(raw);
-                    mSdServer.mSdData.updateFromJSON(jsonRaw);
-                    return createJsonResponse(mSdServer.mSdData.toJson().toString());
-                } catch (JSONException e) {
-                    Log.e(TAG, "updateFromJSON Error: " + e.getMessage());
-                }
-            }
         }
         return new Response(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Bad Request");
     }
@@ -103,33 +93,6 @@ public class SdWebServer extends NanoHTTPD {
     private Response handleSettings(Method method, Map<String, String> params, Map<String, String> files) {
         if (Method.GET.equals(method)) {
             return createJsonResponse(mSdData.toSettingsJSON());
-        } else if (Method.POST.equals(method)) {
-            String raw = params.containsKey("settingsObj") ? params.get("settingsObj") : files.get("postData");
-            if (raw != null) {
-                try {
-                    JSONObject json = new JSONObject(raw);
-                    if (json.has("OsdSettings")) {
-                        json = json.getJSONObject("OsdSettings");
-                    }
-                    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(mContext);
-                    SharedPreferences.Editor editor = prefs.edit();
-                    Iterator<String> keys = json.keys();
-                    while(keys.hasNext()) {
-                        String key = keys.next();
-                        Object val = json.get(key);
-                        if (val instanceof Boolean) editor.putBoolean(key, (Boolean)val);
-                        else if (val instanceof Integer) editor.putInt(key, (Integer)val);
-                        else if (val instanceof Double) editor.putFloat(key, ((Double)val).floatValue());
-                        else if (val instanceof Float) editor.putFloat(key, (Float)val);
-                        else if (val instanceof Long) editor.putLong(key, (Long)val);
-                        else if (val instanceof String) editor.putString(key, (String)val);
-                    }
-                    editor.apply();
-                    return createJsonResponse("{\"status\": \"OK\", \"message\": \"Settings Profile Applied\"}");
-                } catch (JSONException e) {
-                    return createJsonResponse("{\"status\": \"ERROR\", \"message\": \"" + e.getMessage() + "\"}");
-                }
-            }
         }
         return new Response(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Bad Request");
     }
@@ -139,7 +102,7 @@ public class SdWebServer extends NanoHTTPD {
             JSONObject json = new JSONObject();
             JSONArray arr = new JSONArray();
             if (mSdData.simpleSpec != null) {
-                for (double d : mSdData.simpleSpec) arr.put(d);
+                for (int d : mSdData.simpleSpec) arr.put(d);
             }
             json.put("simpleSpec", arr);
             return createJsonResponse(json.toString());
@@ -151,10 +114,14 @@ public class SdWebServer extends NanoHTTPD {
     private Response serveLogList() {
         try {
             JSONObject json = new JSONObject();
-            File[] fileList = mUtil.getDataFilesList();
+            // Unit Regtien: Get actual sensor logs from OsdUtil
+            File logDir = mUtil.getDataStorageDir();
+            File[] fileList = logDir.listFiles();
             JSONArray arr = new JSONArray();
             if (fileList != null) {
-                for (File f : fileList) arr.put(f.getName());
+                for (File f : fileList) {
+                    if (f.isFile()) arr.put(f.getName());
+                }
             }
             json.put("logFileList", arr);
             return createJsonResponse(json.toString());
@@ -173,7 +140,7 @@ public class SdWebServer extends NanoHTTPD {
         } catch (Exception e) {
             Log.e(TAG, "File Error", e);
         }
-        return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found");
+        return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Log File Not Found");
     }
 
     private Response serveAssetFile(String uri) {
@@ -182,7 +149,7 @@ public class SdWebServer extends NanoHTTPD {
             InputStream is = mContext.getAssets().open(path);
             return new Response(Response.Status.OK, getMimeType(uri), is);
         } catch (IOException e) {
-            return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Asset Not Found");
+            return new Response(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Asset Not Found: " + uri);
         }
     }
 
@@ -196,6 +163,7 @@ public class SdWebServer extends NanoHTTPD {
         if (uri.endsWith(".js")) return "application/javascript";
         if (uri.endsWith(".css")) return "text/css";
         if (uri.endsWith(".png")) return "image/png";
+        if (uri.endsWith(".ico")) return "image/x-icon";
         return "text/html";
     }
 }

@@ -193,11 +193,19 @@ public abstract class SdDataSource extends Service {
             double specPower = 0, roiPower = 0;
             final double freqStep = (double)mSdData.mSampleFreq / (double)n;
             
+            // Clear old spectrum
+            if (mSdData.simpleSpec == null) mSdData.simpleSpec = new int[10];
+
             for (int i = 1; i < n / 2; i++) {
                 double power = (mFftBuffer[2 * i] * mFftBuffer[2 * i] + mFftBuffer[2 * i + 1] * mFftBuffer[2 * i + 1]);
                 specPower += power;
                 double freq = i * freqStep;
                 if (freq >= 3.0 && freq <= 8.0) roiPower += power;
+
+                // Unit Regtien: Fill simpleSpec bins (first 10 relevant frequency bins)
+                if (i <= 10) {
+                    mSdData.simpleSpec[i-1] = (int) (power / ACCEL_SCALE_FACTOR);
+                }
             }
             
             double normN = n / 2.0;

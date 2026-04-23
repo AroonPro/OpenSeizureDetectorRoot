@@ -3,6 +3,7 @@ package uk.org.openseizuredetector.openseizuredetector;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Log;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import java.util.ArrayList;
@@ -98,6 +99,15 @@ public class SdData implements Parcelable {
             jo.put("batteryTemp", batteryTemp);
             jo.put("ambientTemp", ambientTemp);
             jo.put("mLocalAlarmSuppressed", mLocalAlarmSuppressed);
+            jo.put("roiPower", roiPower);
+            jo.put("roiRatio", roiRatio);
+            jo.put("specPower", specPower);
+
+            JSONArray specArr = new JSONArray();
+            if (simpleSpec != null) {
+                for (int val : simpleSpec) specArr.put(val);
+            }
+            jo.put("simpleSpec", specArr);
         } catch (JSONException e) {}
         return jo;
     }

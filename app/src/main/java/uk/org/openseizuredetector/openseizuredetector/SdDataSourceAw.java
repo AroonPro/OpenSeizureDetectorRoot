@@ -50,8 +50,16 @@ public class SdDataSourceAw extends SdDataSource implements
         @Override
         public void run() {
             if (isEmulator()) simulateData();
+            
+            // Unit Regtien: Update connection status for Web UI
+            SdServer server = OsdUtil.useSdServerBinding();
+            if (mSdData != null) {
+                mSdData.webServerAlive = (server != null && server.webServer != null);
+                Log.d(TAG, "Health: WebServer=" + mSdData.webServerAlive + ", SSH=" + mSdData.serverOK);
+            }
+
             triggerUiUpdate(); 
-            mClockHandler.postDelayed(this, 5000); 
+            mClockHandler.postDelayed(this, 10000); // Unit Regtien: Reduced poll from 5s to 10s to save CPU
         }
     };
 
@@ -97,10 +105,11 @@ public class SdDataSourceAw extends SdDataSource implements
     private void initialiseHardware(Context context) {
         mActiveSensors.clear();
         // Use fixed intervals to avoid redundant math in loop
-        mActiveSensors.add(new AccelerationSensor(context, 40000, 0) {
+        // Unit Regtien: Reduced sampling from 40ms to 60ms for accelerometer (still above 15Hz required)
+        mActiveSensors.add(new AccelerationSensor(context, 60000, 0) {
             @Override public void onSensorChanged(SensorEvent event) { accelerationEvent(event); }
         });
-        mActiveSensors.add(new HeartRateSensor(context, 1000000, 0) {
+        mActiveSensors.add(new HeartRateSensor(context, 2000000, 0) { // Reduced HR poll from 1s to 2s
             @Override public void onSensorChanged(SensorEvent event) { heartRateEvent(event); }
         });
         
@@ -112,7 +121,7 @@ public class SdDataSourceAw extends SdDataSource implements
         });
         
         // Low Latency Off-Body Detect
-        mActiveSensors.add(new OffBodyDetectSensor(context, 1000000, 0) {
+        mActiveSensors.add(new OffBodyDetectSensor(context, 5000000, 0) { // Reduced from 1s to 5s
             @Override public void onSensorChanged(SensorEvent event) {
                 mSdData.mWatchOnBody = (event.values[0] != 0);
             }
@@ -151,10 +160,12 @@ public class SdDataSourceAw extends SdDataSource implements
         float vz = event.values[2];
         double magnitude = Math.sqrt(vx*vx + vy*vy + vz*vz);
         
-        mSdData.rawData[mSdData.mNsamp % mSdData.rawData.length] = magnitude * 100;
+        // Unit Regtien: Optimized buffer management using Graham's CircBuf
+        mAccelBuffer.add(magnitude * 100);
         mSdData.mNsamp++;
 
-        if (mSdData.mNsamp >= mSdData.mNsampDefault && mSdData.mNsamp % 25 == 0) {
+        // Only analyze every 50 samples (~3 seconds at 16.6Hz) to save battery
+        if (mSdData.mNsamp >= mSdData.mNsampDefault && mSdData.mNsamp % 50 == 0) {
             doAnalysis(); 
             // Architecture Rule: Conditional update only.
             // On Wear platform, we suppress UI updates for movement unless Alarm is active.
@@ -175,9 +186,6 @@ public class SdDataSourceAw extends SdDataSource implements
             mSdData.mWatchOnBody = true; // Heart rate detected means watch is on body
             hrCheck();
             triggerUiUpdate(); // HR events are low frequency, updates allowed.
-        } else {
-            // If heart rate is 0, we don't immediately set off-body as sensors can be noisy
-            // We rely on the dedicated Off-Body sensor where available.
         }
     }
 

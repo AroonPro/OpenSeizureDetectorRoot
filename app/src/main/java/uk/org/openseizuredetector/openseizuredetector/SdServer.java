@@ -30,8 +30,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * SdServer - Unit Regtien Optimized.
+ * SdServer - en_GB
  * Root service logic with forensic state management and zero-churn resource handling.
+ * Protocol: Managed WakeLock for sensor stability and tilt response.
  */
 public abstract class SdServer extends Service implements SdDataReceiver {
     protected static final String TAG = "SdServer";
@@ -58,7 +59,19 @@ public abstract class SdServer extends Service implements SdDataReceiver {
 
     protected final Handler mHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService mBackgroundExecutor = Executors.newSingleThreadExecutor();
-    private final InetSocketAddress mSshAddr = new InetSocketAddress("127.0.0.1", 8123);
+
+    /**
+     * en_GB: Acquires a partial wake lock to ensure the CPU remains active for forensic sensor polling.
+     * This improves gesture response (tilt-to-wake) by preventing deep CPU sleep states.
+     */
+    private void acquireWakeLock() {
+        if (mWakeLock != null && !mWakeLock.isHeld()) {
+            mWakeLock.acquire(10 * 60 * 1000L); // 10 minute safety limit
+            Log.i(TAG, "WakeLock acquired: Forensic stability active.");
+        }
+    }
+
+    private final InetSocketAddress mSshAddr = new InetSocketAddress("127.0.0.1", 8080); // Linked to WebServer Port
 
     public class SdBinder extends Binder {
         public SdServer getService() { return SdServer.this; }
@@ -101,11 +114,8 @@ public abstract class SdServer extends Service implements SdDataReceiver {
 
     private void checkTunnelLiveness() {
         mBackgroundExecutor.execute(() -> {
-            boolean active = false;
-            try (Socket socket = new Socket()) {
-                socket.connect(mSshAddr, 2000);
-                active = true;
-            } catch (IOException ignored) {}
+            // Protocol Fix: Check actual SSH Session state via the client
+            boolean active = (mSshClient != null && mSshClient.isConnected());
 
             final boolean result = active;
             mHandler.post(() -> {
@@ -153,7 +163,22 @@ public abstract class SdServer extends Service implements SdDataReceiver {
         SshCluster cluster = mSettingsManager.getSshConfig();
         if (cluster != null && cluster.host != null && !cluster.host.isEmpty()) {
             if (mSshClient == null) mSshClient = new SshClient(getApplicationContext());
-            mSshClient.connectAndUploadConfig(cluster, (success, msg) -> checkTunnelLiveness());
+            // Standard session does NOT open R-tunnels.
+            mSshClient.connectAndUploadConfig(cluster, false, (success, msg) -> checkTunnelLiveness());
+        }
+    }
+
+    /**
+     * Forced R-tunnel restart with PID lock consideration via Webhook.
+     */
+    public void forceRestartSshTunnel() {
+        SshCluster cluster = mSettingsManager.getSshConfig();
+        if (cluster != null && cluster.host != null && !cluster.host.isEmpty()) {
+            if (mSshClient == null) mSshClient = new SshClient(getApplicationContext());
+            mSshClient.connectAndUploadConfig(cluster, true, (success, msg) -> {
+                checkTunnelLiveness();
+                if (success) Log.i(TAG, "Forced SSH Restart Successful.");
+            });
         }
     }
 
@@ -215,6 +240,7 @@ public abstract class SdServer extends Service implements SdDataReceiver {
             mSdDataSource = createDataSource();
             if (mSdDataSource != null) mSdDataSource.start();
         }
+        acquireWakeLock();
         return START_STICKY;
     }
 
@@ -227,6 +253,7 @@ public abstract class SdServer extends Service implements SdDataReceiver {
         if (mSdDataSource != null) mSdDataSource.stop();
         if (mHealthManager != null) mHealthManager.stopMonitoring();
         if (webServer != null) webServer.stop();
+        if (mWakeLock != null && mWakeLock.isHeld()) mWakeLock.release();
         super.onDestroy();
     }
 }
