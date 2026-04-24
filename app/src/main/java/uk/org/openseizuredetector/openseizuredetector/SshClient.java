@@ -29,8 +29,8 @@ import javax.net.ssl.X509TrustManager;
 
 /**
  * SshClient - en_GB
- * Forensic KEX alignment with 2-Stage Connection logic for PID lock clearing.
- * Unit Regtien Protocol: No R-tunnels on default, forced restart only.
+ * Forensic KEX alignment with 2-Stage Connection logic.
+ * Protocol: Automatic remote cleanup on disconnect to prevent port locks.
  */
 public class SshClient {
     private static final String TAG = "SshClient";
@@ -44,6 +44,7 @@ public class SshClient {
     private final RequestQueue mQueue;
     private final EncryptedSettingsManager mSettingsManager;
     private Session mSession;
+    private String mLastUser;
 
     public SshClient(Context context) {
         this.mContext = context.getApplicationContext();
@@ -71,6 +72,7 @@ public class SshClient {
     }
 
     public void connectAndUploadConfig(final SshCluster cluster, final boolean forceRestartTunnels, final SshCallback callback) {
+        this.mLastUser = cluster.user;
         new Thread(() -> {
             try {
                 if (forceRestartTunnels) {
@@ -101,7 +103,7 @@ public class SshClient {
 
                 Log.i(TAG, "SSH: Stage 1 - Session Connected.");
 
-                // Unit Regtien Stage 1: Forcefully clear remote port locks via SSH Exec
+                // Stage 1: Forcefully clear remote port locks if requested
                 if (forceRestartTunnels && cluster.tunnels != null) {
                     for (String t : cluster.tunnels) {
                         if (t.startsWith("R")) {
@@ -109,7 +111,7 @@ public class SshClient {
                             executeRemoteCommand("kill -9 $(lsof -t -i :" + remotePort + ") 2>/dev/null || true");
                         }
                     }
-                    Thread.sleep(1500); // Grace period for kernel port release
+                    Thread.sleep(1500); 
                 }
 
                 // Stage 2: Establish Tunnels
@@ -159,6 +161,7 @@ public class SshClient {
     }
 
     private void executeWebhook(String type, String userId) {
+        if (userId == null) return;
         try {
             JSONObject json = new JSONObject();
             json.put("type", type);
@@ -172,6 +175,7 @@ public class SshClient {
 
     public void disconnect() {
         if (mSession != null && mSession.isConnected()) {
+            executeWebhook("DISCONNECT", mLastUser);
             mSession.disconnect();
             mSession = null;
         }
