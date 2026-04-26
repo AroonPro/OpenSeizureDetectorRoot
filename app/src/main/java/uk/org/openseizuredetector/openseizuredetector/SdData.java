@@ -10,8 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * SdData - Standardized Data Container (Unit Regtien Protocol Optimized).
- * Forensic accuracy in parcellation; zero redundant allocation.
+ * SdData - en_GB
+ * Standardized Data Container fully compatible with Graham's Web Protocol.
+ * Forensic accuracy with zero redundant allocation.
  */
 public class SdData implements Parcelable {
     private final static String TAG = "SdData";
@@ -20,7 +21,7 @@ public class SdData implements Parcelable {
     public boolean mIsCharging = false;
     public boolean mIsSleeping = false;
     public float batteryTemp = 0.0f;
-    public float ambientTemp = 20.0f; // Default assumption
+    public float ambientTemp = 20.0f;
 
     public long batteryPc = -1;
     public int phoneBatteryPc = -1;
@@ -41,42 +42,121 @@ public class SdData implements Parcelable {
 
     public double mHR = 0, mHr = 0, mHrAvg = 0, mO2Sat = 0, mHrv = 0;
     public double mO2SatThreshMin = 90.0;
+    
+    // GPS Data
+    public double latitude = 0;
+    public double longitude = 0;
 
-    public long specPower, roiPower, roiRatio;
-    public int mNsamp = 0, mNsampDefault = 125;
+    // en_GB: Analytical fields for Graham's Web UI
+    public long maxVal = 0;
+    public long maxFreq = 0;
+    public long specPower = 0;
+    public long roiPower = 0;
+    public long roiRatio = 0;
+    public int[] simpleSpec = new int[10];
+    
+    // Sampling metadata
     public long mSampleFreq = 25;
-    public double latitude = 0.0, longitude = 0.0;
+    public int mNsamp = 0;
+    public int mNsampDefault = 250;
+
+    // en_GB: Settings expected by Web UI (OsdSettings wrapper)
+    public int alarmFreqMin = 3;
+    public int alarmFreqMax = 8;
+    public int alarmThresh = 15;
+    public int alarmRatioThresh = 4;
+    public int warnTime = 10;
+    public int alarmTime = 10;
+
+    // Activity status
     public boolean isExerciseActive = false;
     public String exerciseType = "NONE";
 
-    // Re-adding missing fields for Legacy/Web support
     public String watchSerNo = "", watchSdName = "", watchPartNo = "";
-    public int[] simpleSpec = new int[10];
     public double[] rawData = new double[250];
     public double[] rawData3D = new double[750];
 
     public SdData() { lastUpdateMs = System.currentTimeMillis(); }
 
-    public boolean updateFromJSON(JSONObject jo) {
+    public JSONObject toJson() {
+        JSONObject root = new JSONObject();
+        JSONObject data = new JSONObject();
         try {
-            batteryPc = jo.optLong("batteryPc", batteryPc);
-            alarmState = jo.optInt("alarmState", alarmState);
-            mHR = jo.optDouble("hr", mHR);
-            mHr = mHR;
-            mO2Sat = jo.optDouble("o2Sat", mO2Sat);
-            serverOK = jo.optBoolean("serverOK", serverOK);
-            webServerAlive = jo.optBoolean("webServerAlive", webServerAlive);
+            data.put("batteryPc", batteryPc);
+            data.put("alarmState", alarmState);
+            data.put("hr", mHR);
+            data.put("o2Sat", mO2Sat);
+            data.put("serverOK", serverOK);
+            data.put("webServerAlive", webServerAlive);
+            data.put("mWatchOnBody", mWatchOnBody);
+            data.put("mIsCharging", mIsCharging);
+            data.put("mIsSleeping", mIsSleeping);
+            data.put("batteryTemp", batteryTemp);
+            data.put("ambientTemp", ambientTemp);
+            data.put("roiPower", roiPower);
+            data.put("roiRatio", roiRatio);
+            data.put("specPower", specPower);
+            data.put("maxVal", maxVal);
+            data.put("maxFreq", maxFreq);
+            data.put("alarmPhrase", alarmPhrase);
+            data.put("isExerciseActive", isExerciseActive);
+            data.put("exerciseType", exerciseType);
+            data.put("latitude", latitude);
+            data.put("longitude", longitude);
             
-            mWatchOnBody = jo.optBoolean("mWatchOnBody", mWatchOnBody);
-            mIsCharging = jo.optBoolean("mIsCharging", mIsCharging);
-            mIsSleeping = jo.optBoolean("mIsSleeping", mIsSleeping);
-            batteryTemp = (float) jo.optDouble("batteryTemp", batteryTemp);
-            ambientTemp = (float) jo.optDouble("ambientTemp", ambientTemp);
-            mLocalAlarmSuppressed = jo.optBoolean("mLocalAlarmSuppressed", mLocalAlarmSuppressed);
+            JSONArray specArr = new JSONArray();
+            if (simpleSpec != null) {
+                for (int val : simpleSpec) specArr.put(val);
+            }
+            data.put("simpleSpec", specArr);
             
+            // en_GB: Essential wrapper for Graham's live graph
+            root.put("OsdData", data);
+        } catch (JSONException e) { Log.e(TAG, "toJson Error: " + e.getMessage()); }
+        return root;
+    }
+
+    public JSONObject toSettingsJSON() {
+        JSONObject root = new JSONObject();
+        JSONObject settings = new JSONObject();
+        try {
+            settings.put("alarmFreqMin", alarmFreqMin);
+            settings.put("alarmFreqMax", alarmFreqMax);
+            settings.put("alarmThresh", alarmThresh);
+            settings.put("alarmRatioThresh", alarmRatioThresh);
+            settings.put("warnTime", warnTime);
+            settings.put("alarmTime", alarmTime);
+            settings.put("batteryPc", batteryPc);
+            
+            // en_GB: Essential wrapper for Graham's settings UI
+            root.put("OsdSettings", settings);
+        } catch (JSONException e) { Log.e(TAG, "toSettingsJSON Error: " + e.getMessage()); }
+        return root;
+    }
+
+    public String toDatapointJSON() {
+        return toJson().toString();
+    }
+
+    public void updateFromJSON(JSONObject jo) {
+        try {
+            JSONObject data = jo.has("OsdData") ? jo.getJSONObject("OsdData") : jo;
+            batteryPc = data.optLong("batteryPc", batteryPc);
+            alarmState = data.optInt("alarmState", alarmState);
+            mHR = data.optDouble("hr", mHR);
+            mO2Sat = data.optDouble("o2Sat", mO2Sat);
+            serverOK = data.optBoolean("serverOK", serverOK);
+            webServerAlive = data.optBoolean("webServerAlive", webServerAlive);
+            mWatchOnBody = data.optBoolean("mWatchOnBody", mWatchOnBody);
+            mIsCharging = data.optBoolean("mIsCharging", mIsCharging);
+            batteryTemp = (float) data.optDouble("batteryTemp", batteryTemp);
+            ambientTemp = (float) data.optDouble("ambientTemp", ambientTemp);
+            isExerciseActive = data.optBoolean("isExerciseActive", isExerciseActive);
+            exerciseType = data.optString("exerciseType", exerciseType);
+            latitude = data.optDouble("latitude", latitude);
+            longitude = data.optDouble("longitude", longitude);
             haveData = true;
-            return true;
-        } catch (Exception e) { return false; }
+        } catch (Exception e) { Log.e(TAG, "updateFromJSON Error: " + e.getMessage()); }
     }
 
     public void fromJSON(String jsonStr) {
@@ -84,91 +164,39 @@ public class SdData implements Parcelable {
         catch (JSONException e) { Log.e(TAG, "fromJSON Error: " + e.getMessage()); }
     }
 
-    public JSONObject toJson() {
-        JSONObject jo = new JSONObject();
-        try {
-            jo.put("batteryPc", batteryPc);
-            jo.put("alarmState", alarmState);
-            jo.put("hr", mHR);
-            jo.put("o2Sat", mO2Sat);
-            jo.put("serverOK", serverOK);
-            jo.put("webServerAlive", webServerAlive);
-            jo.put("mWatchOnBody", mWatchOnBody);
-            jo.put("mIsCharging", mIsCharging);
-            jo.put("mIsSleeping", mIsSleeping);
-            jo.put("batteryTemp", batteryTemp);
-            jo.put("ambientTemp", ambientTemp);
-            jo.put("mLocalAlarmSuppressed", mLocalAlarmSuppressed);
-            jo.put("roiPower", roiPower);
-            jo.put("roiRatio", roiRatio);
-            jo.put("specPower", specPower);
-
-            JSONArray specArr = new JSONArray();
-            if (simpleSpec != null) {
-                for (int val : simpleSpec) specArr.put(val);
-            }
-            jo.put("simpleSpec", specArr);
-        } catch (JSONException e) {}
-        return jo;
-    }
-
-    public String toSettingsJSON() { return toJson().toString(); }
-    public String toDatapointJSON() { return toJson().toString(); }
-
     @Override public int describeContents() { return 0; }
-
     @Override public void writeToParcel(Parcel dest, int flags) {
-        dest.writeLong(batteryPc);              // 1
-        dest.writeDouble(mO2Sat);               // 2
-        dest.writeDouble(mHR);                  // 3
-        dest.writeInt(alarmState);              // 4
-        dest.writeString(alarmPhrase != null ? alarmPhrase : ""); // 5
-        dest.writeInt(isExerciseActive ? 1 : 0);// 6
-        dest.writeString(exerciseType != null ? exerciseType : "NONE"); // 7
-        dest.writeInt(phoneBatteryPc);          // 8
-        dest.writeInt(webServerAlive ? 1 : 0);  // 9
-        dest.writeInt(watchConnected ? 1 : 0);  // 10
-        dest.writeInt(serverOK ? 1 : 0);        // 11
-        dest.writeDouble(latitude);             // 12
-        dest.writeDouble(longitude);            // 13
-        dest.writeInt(mWatchOnBody ? 1 : 0);    // 14
-        dest.writeLong(mSampleFreq);            // 15
-        dest.writeInt(mNsamp);                  // 16
-        dest.writeString(watchSerNo);           // 17
-        dest.writeString(watchSdName);          // 18
-        dest.writeString(watchPartNo);          // 19
-        dest.writeInt(mIsCharging ? 1 : 0);     // 20
-        dest.writeInt(mIsSleeping ? 1 : 0);     // 21
-        dest.writeFloat(batteryTemp);           // 22
-        dest.writeFloat(ambientTemp);           // 23
-        dest.writeInt(mLocalAlarmSuppressed ? 1 : 0); // 24
+        dest.writeLong(batteryPc);
+        dest.writeDouble(mO2Sat);
+        dest.writeDouble(mHR);
+        dest.writeInt(alarmState);
+        dest.writeString(alarmPhrase != null ? alarmPhrase : "");
+        dest.writeInt(mWatchOnBody ? 1 : 0);
+        dest.writeLong(mSampleFreq);
+        dest.writeInt(mNsamp);
+        dest.writeFloat(batteryTemp);
+        dest.writeFloat(ambientTemp);
+        dest.writeInt(isExerciseActive ? 1 : 0);
+        dest.writeString(exerciseType != null ? exerciseType : "NONE");
+        dest.writeDouble(latitude);
+        dest.writeDouble(longitude);
     }
 
     protected SdData(Parcel in) {
-        batteryPc = in.readLong();              // 1
-        mO2Sat = in.readDouble();               // 2
-        mHR = in.readDouble();                  // 3
-        alarmState = in.readInt();              // 4
-        alarmPhrase = in.readString();          // 5
-        isExerciseActive = in.readInt() == 1;   // 6
-        exerciseType = in.readString();         // 7
-        phoneBatteryPc = in.readInt();          // 8
-        webServerAlive = in.readInt() == 1;     // 9
-        watchConnected = in.readInt() == 1;     // 10
-        serverOK = in.readInt() == 1;           // 11
-        latitude = in.readDouble();             // 12
-        longitude = in.readDouble();            // 13
-        mWatchOnBody = in.readInt() == 1;       // 14
-        mSampleFreq = in.readLong();            // 15
-        mNsamp = in.readInt();                  // 16
-        watchSerNo = in.readString();           // 17
-        watchSdName = in.readString();          // 18
-        watchPartNo = in.readString();          // 19
-        mIsCharging = in.readInt() == 1;        // 20
-        mIsSleeping = in.readInt() == 1;        // 21
-        batteryTemp = in.readFloat();           // 22
-        ambientTemp = in.readFloat();           // 23
-        mLocalAlarmSuppressed = in.readInt() == 1; // 24
+        batteryPc = in.readLong();
+        mO2Sat = in.readDouble();
+        mHR = in.readDouble();
+        alarmState = in.readInt();
+        alarmPhrase = in.readString();
+        mWatchOnBody = in.readInt() == 1;
+        mSampleFreq = in.readLong();
+        mNsamp = in.readInt();
+        batteryTemp = in.readFloat();
+        ambientTemp = in.readFloat();
+        isExerciseActive = in.readInt() == 1;
+        exerciseType = in.readString();
+        latitude = in.readDouble();
+        longitude = in.readDouble();
     }
 
     public static final Creator<SdData> CREATOR = new Creator<SdData>() {

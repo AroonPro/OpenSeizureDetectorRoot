@@ -21,6 +21,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.Properties;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
@@ -29,22 +31,26 @@ import javax.net.ssl.X509TrustManager;
 
 /**
  * SshClient - en_GB
- * Forensic KEX alignment with 2-Stage Connection logic.
- * Protocol: Automatic remote cleanup on disconnect to prevent port locks.
+ * Forensic KEX alignment with Heartbeat logic.
+ * Protocol #osd_260426: Resolved signature algorithm mismatch (ssh-rsa vs rsa-sha2).
  */
 public class SshClient {
     private static final String TAG = "SshClient";
     private static final String KEY_FILENAME = "id_rsa_osd";
     
+    // Updated Algs for modern OpenSSH compatibility while allowing legacy fallbacks
     private static final String KEX_ALGS = "ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha256";
-    private static final String HOST_KEY_ALGS = "ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,rsa-sha2-512,rsa-sha2-256,ssh-rsa";
-    private static final String PUBKEY_ALGS = "ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,rsa-sha2-512,rsa-sha2-256,ssh-rsa";
+    private static final String HOST_KEY_ALGS = "rsa-sha2-512,rsa-sha2-256,ecdsa-sha2-nistp256,ssh-rsa";
+    private static final String PUBKEY_ALGS = "rsa-sha2-512,rsa-sha2-256,ecdsa-sha2-nistp256,ssh-rsa";
 
     private final Context mContext;
     private final RequestQueue mQueue;
     private final EncryptedSettingsManager mSettingsManager;
+    private final ExecutorService mSshExecutor = Executors.newSingleThreadExecutor();
+    
     private Session mSession;
     private String mLastUser;
+    private boolean mIsConnecting = false;
 
     public SshClient(Context context) {
         this.mContext = context.getApplicationContext();
@@ -71,17 +77,21 @@ public class SshClient {
         }
     }
 
-    public void connectAndUploadConfig(final SshCluster cluster, final boolean forceRestartTunnels, final SshCallback callback) {
+    public synchronized void connectAndUploadConfig(final SshCluster cluster, final boolean forceRestartTunnels, final SshCallback callback) {
+        if (mIsConnecting || isConnected()) {
+            if (callback != null) callback.onComplete(isConnected(), "Check skip");
+            return;
+        }
+        mIsConnecting = true;
         this.mLastUser = cluster.user;
-        new Thread(() -> {
+        
+        mSshExecutor.execute(() -> {
             try {
                 if (forceRestartTunnels) {
                     executeWebhook("RESTART", cluster.user);
                 }
 
-                Log.i(TAG, "SSH: Dialing " + cluster.host + " as user: " + cluster.user);
                 JSch jsch = new JSch();
-                
                 File internalKey = new File(mContext.getFilesDir(), KEY_FILENAME);
                 if (internalKey.exists()) {
                     jsch.addIdentity(internalKey.getAbsolutePath());
@@ -97,55 +107,74 @@ public class SshClient {
                 config.put("PubkeyAcceptedAlgorithms", PUBKEY_ALGS);
                 config.put("PreferredAuthentications", "publickey,password,keyboard-interactive");
                 
+                // JSch Fix: Force server to accept SHA2 signatures for RSA keys
+                config.put("pubkeyauth_gssapi_with_mic", "no");
+                
                 mSession.setConfig(config);
                 mSession.setServerAliveInterval(30000);
                 mSession.connect(15000);
 
-                Log.i(TAG, "SSH: Stage 1 - Session Connected.");
-
-                // Stage 1: Forcefully clear remote port locks if requested
-                if (forceRestartTunnels && cluster.tunnels != null) {
-                    for (String t : cluster.tunnels) {
-                        if (t.startsWith("R")) {
-                            String remotePort = t.substring(1).split(":")[0];
-                            executeRemoteCommand("kill -9 $(lsof -t -i :" + remotePort + ") 2>/dev/null || true");
-                        }
-                    }
-                    Thread.sleep(1500); 
-                }
-
-                // Stage 2: Establish Tunnels
                 if (cluster.tunnels != null) {
-                    for (String t : cluster.tunnels) {
-                        if (t.startsWith("L")) {
-                            processTunnel(t);
-                        } else if (forceRestartTunnels && t.startsWith("R")) {
-                            processTunnel(t);
-                        }
-                    }
+                    for (String t : cluster.tunnels) processTunnel(t);
                 }
 
                 if (callback != null) callback.onComplete(true, "CONNECTED");
                 executeWebhook("CONNECT", cluster.user);
 
             } catch (Exception e) {
-                Log.e(TAG, "SSH 2-Stage Fail: " + e.getMessage());
+                Log.e(TAG, "SSH Fail: " + e.getMessage());
+                mSession = null;
                 if (callback != null) callback.onComplete(false, e.getMessage());
+            } finally {
+                mIsConnecting = false;
             }
-        }).start();
+        });
     }
 
-    private void executeRemoteCommand(String command) {
-        try {
-            Log.d(TAG, "Executing Stage 1 Kill: " + command);
-            ChannelExec channel = (ChannelExec) mSession.openChannel("exec");
-            channel.setCommand(command);
-            channel.connect();
-            while (!channel.isClosed()) { Thread.sleep(100); }
-            channel.disconnect();
-        } catch (Exception e) {
-            Log.e(TAG, "Stage 1 Remote Command Fail: " + e.getMessage());
+    public void sendHeartbeat(final SshCallback callback) {
+        if (!isConnected()) {
+            if (callback != null) callback.onComplete(false, "Disconnected");
+            return;
         }
+
+        mSshExecutor.execute(() -> {
+            try {
+                ChannelExec channel = (ChannelExec) mSession.openChannel("exec");
+                channel.setCommand("true");
+                channel.connect(5000);
+                
+                long start = System.currentTimeMillis();
+                while (!channel.isClosed() && (System.currentTimeMillis() - start < 5000)) {
+                    Thread.sleep(100);
+                }
+                boolean success = channel.isClosed() && channel.getExitStatus() == 0;
+                channel.disconnect();
+                if (callback != null) callback.onComplete(success, success ? "OK" : "TIMEOUT");
+            } catch (Exception e) {
+                if (callback != null) callback.onComplete(false, e.getMessage());
+            }
+        });
+    }
+
+    public void executeRemoteCommand(String command, final SshCallback callback) {
+        if (!isConnected()) {
+            if (callback != null) callback.onComplete(false, "Disconnected");
+            return;
+        }
+        mSshExecutor.execute(() -> {
+            try {
+                ChannelExec channel = (ChannelExec) mSession.openChannel("exec");
+                channel.setCommand(command);
+                channel.connect();
+                while (!channel.isClosed()) { Thread.sleep(200); }
+                int status = channel.getExitStatus();
+                channel.disconnect();
+                if (callback != null) callback.onComplete(status == 0, "Status: " + status);
+            } catch (Exception e) {
+                Log.e(TAG, "Exec Fail: " + e.getMessage());
+                if (callback != null) callback.onComplete(false, e.getMessage());
+            }
+        });
     }
 
     private void processTunnel(String tunnelStr) {
@@ -174,15 +203,21 @@ public class SshClient {
     }
 
     public void disconnect() {
-        if (mSession != null && mSession.isConnected()) {
-            executeWebhook("DISCONNECT", mLastUser);
-            mSession.disconnect();
-            mSession = null;
+        if (mSession != null) {
+            mSshExecutor.execute(() -> {
+                executeWebhook("DISCONNECT", mLastUser);
+                if (mSession != null) mSession.disconnect();
+                mSession = null;
+            });
         }
     }
 
     public boolean isConnected() {
         return mSession != null && mSession.isConnected();
+    }
+    
+    public void shutdown() {
+        mSshExecutor.shutdown();
     }
 
     public interface SshCallback { void onComplete(boolean success, String message); }

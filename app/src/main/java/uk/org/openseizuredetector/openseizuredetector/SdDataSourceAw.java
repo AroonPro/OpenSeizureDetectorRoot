@@ -30,7 +30,7 @@ import java.util.Random;
 
 /**
  * SdDataSourceAw - Unit Regtien Optimized.
- * Zero-allocation in accelerometer events; conditional UI updates.
+ * Protocol #osd_260426: Enhanced accelerometer responsiveness.
  */
 public class SdDataSourceAw extends SdDataSource implements 
         SensorEventListener, 
@@ -41,7 +41,6 @@ public class SdDataSourceAw extends SdDataSource implements
     private final List<AndroidSensor> mActiveSensors = new ArrayList<>();
     private final Random mRandom = new Random();
     
-    // Static objects to prevent allocation in hot paths
     private final IntentFilter mBatteryFilter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
     private final String mPkgName;
 
@@ -51,15 +50,13 @@ public class SdDataSourceAw extends SdDataSource implements
         public void run() {
             if (isEmulator()) simulateData();
             
-            // Unit Regtien: Update connection status for Web UI
             SdServer server = OsdUtil.useSdServerBinding();
             if (mSdData != null) {
                 mSdData.webServerAlive = (server != null && server.webServer != null);
-                Log.d(TAG, "Health: WebServer=" + mSdData.webServerAlive + ", SSH=" + mSdData.serverOK);
             }
 
             triggerUiUpdate(); 
-            mClockHandler.postDelayed(this, 10000); // Unit Regtien: Reduced poll from 5s to 10s to save CPU
+            mClockHandler.postDelayed(this, 5000); // Back to 5s for better status visibility
         }
     };
 
@@ -89,7 +86,7 @@ public class SdDataSourceAw extends SdDataSource implements
         }
         
         if (temp != -1) {
-            mSdData.batteryTemp = temp / 10.0f; // Battery temperature is in tenths of a degree Celsius
+            mSdData.batteryTemp = temp / 10.0f;
         }
         
         mSdData.mIsCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
@@ -104,24 +101,21 @@ public class SdDataSourceAw extends SdDataSource implements
 
     private void initialiseHardware(Context context) {
         mActiveSensors.clear();
-        // Use fixed intervals to avoid redundant math in loop
-        // Unit Regtien: Reduced sampling from 40ms to 60ms for accelerometer (still above 15Hz required)
-        mActiveSensors.add(new AccelerationSensor(context, 60000, 0) {
+        // #osd_260426: Restore accelerometer sampling rate for higher sensitivity
+        mActiveSensors.add(new AccelerationSensor(context, 40000, 1) { // 25Hz, high priority
             @Override public void onSensorChanged(SensorEvent event) { accelerationEvent(event); }
         });
-        mActiveSensors.add(new HeartRateSensor(context, 2000000, 0) { // Reduced HR poll from 1s to 2s
+        mActiveSensors.add(new HeartRateSensor(context, 1000000, 0) { // 1s HR poll
             @Override public void onSensorChanged(SensorEvent event) { heartRateEvent(event); }
         });
         
-        // Architecture Addition: Ambient Temperature for forensic heat-mapping
         mActiveSensors.add(new AmbientTemperatureSensor(context, 10000000, 0) {
             @Override public void onSensorChanged(SensorEvent event) {
                 if (event.values.length > 0) mSdData.ambientTemp = event.values[0];
             }
         });
         
-        // Low Latency Off-Body Detect
-        mActiveSensors.add(new OffBodyDetectSensor(context, 5000000, 0) { // Reduced from 1s to 5s
+        mActiveSensors.add(new OffBodyDetectSensor(context, 1000000, 0) { // 1s check
             @Override public void onSensorChanged(SensorEvent event) {
                 mSdData.mWatchOnBody = (event.values[0] != 0);
             }
@@ -154,25 +148,23 @@ public class SdDataSourceAw extends SdDataSource implements
     @Override public void startPebbleApp() {}
 
     public void accelerationEvent(SensorEvent event) {
-        // Zero-allocation magnitude calculation
+        // Enforce update prefs for fitness profile changes
+        updatePrefs();
+
         float vx = event.values[0];
         float vy = event.values[1];
         float vz = event.values[2];
         double magnitude = Math.sqrt(vx*vx + vy*vy + vz*vz);
         
-        // Unit Regtien: Optimized buffer management using Graham's CircBuf
         mAccelBuffer.add(magnitude * 100);
         mSdData.mNsamp++;
 
-        // Only analyze every 50 samples (~3 seconds at 16.6Hz) to save battery
-        if (mSdData.mNsamp >= mSdData.mNsampDefault && mSdData.mNsamp % 50 == 0) {
+        // Analyze every 25 samples (~1 second at 25Hz) for lower latency detection
+        if (mSdData.mNsamp >= mSdData.mNsampDefault && mSdData.mNsamp % 25 == 0) {
             doAnalysis(); 
-            // Architecture Rule: Conditional update only.
-            // On Wear platform, we suppress UI updates for movement unless Alarm is active.
-            if (mPkgName.contains(".aw")) {
-                if (mSdData.alarmState >= 2) triggerUiUpdate();
-            } else {
-                triggerUiUpdate(); // Phone platform (Viewer) gets full visualization
+            // Aways trigger UI update if anything but OK state
+            if (mSdData.alarmState > 0) {
+                triggerUiUpdate();
             }
         }
     }
@@ -183,15 +175,17 @@ public class SdDataSourceAw extends SdDataSource implements
             mSdData.mHR = hr;
             mSdData.mHr = hr;
             mSdData.haveData = true;
-            mSdData.mWatchOnBody = true; // Heart rate detected means watch is on body
+            mSdData.mWatchOnBody = true;
             hrCheck();
-            triggerUiUpdate(); // HR events are low frequency, updates allowed.
+            triggerUiUpdate();
         }
     }
 
     @Override public void onMessageReceived(@NonNull MessageEvent messageEvent) {}
     @Override public void onCapabilityChanged(@NonNull CapabilityInfo capabilityInfo) {}
-    @Override public void onSensorChanged(SensorEvent event) {}
+    @Override public void onSensorChanged(SensorEvent event) {
+        // Delegate based on sensor type if needed, but hardware init uses anonymous classes
+    }
     @Override public void onAccuracyChanged(Sensor sensor, int accuracy) {}
     @Nullable @Override public IBinder onBind(Intent intent) { return null; }
 }

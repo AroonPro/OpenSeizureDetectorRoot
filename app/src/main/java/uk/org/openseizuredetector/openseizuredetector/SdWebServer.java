@@ -30,7 +30,7 @@ public class SdWebServer extends NanoHTTPD {
     private final OsdUtil mUtil;
 
     public SdWebServer(Context context, SdData sdData, SdServer sdServer) {
-        // Unit Regtien: Listen on 8080, accessible via SSH tunnel (e.g. 28080 -> 8080)
+        // en_GB: Listen on 8080, accessible via SSH tunnel (e.g. 28080 -> 8080)
         super(8080);
         this.mSdData = sdData;
         this.mContext = context;
@@ -92,7 +92,7 @@ public class SdWebServer extends NanoHTTPD {
 
     private Response handleSettings(Method method, Map<String, String> params, Map<String, String> files) {
         if (Method.GET.equals(method)) {
-            return createJsonResponse(mSdData.toSettingsJSON());
+            return createJsonResponse(mSdData.toSettingsJSON().toString());
         }
         return new Response(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Bad Request");
     }
@@ -114,7 +114,6 @@ public class SdWebServer extends NanoHTTPD {
     private Response serveLogList() {
         try {
             JSONObject json = new JSONObject();
-            // Unit Regtien: Get actual sensor logs from OsdUtil
             File logDir = mUtil.getDataStorageDir();
             File[] fileList = logDir.listFiles();
             JSONArray arr = new JSONArray();

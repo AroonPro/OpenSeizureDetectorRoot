@@ -1,5 +1,7 @@
 package uk.org.openseizuredetector.openseizuredetector;
 
+import android.app.ActivityOptions;
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Binder;
@@ -11,8 +13,9 @@ import androidx.annotation.Nullable;
 import androidx.lifecycle.MutableLiveData;
 
 /**
- * AWSdService - Unit Regtien Optimized.
+ * AWSdService - en_GB
  * Bridges sensors to UI and handles foreground transitions with forensic precision.
+ * Updated: Android 14 BAL (Background Activity Launch) bypass via PendingIntent injection.
  */
 public class AWSdService extends SdServer {
     private final String TAG = "AWSdService";
@@ -54,7 +57,7 @@ public class AWSdService extends SdServer {
         super.onSdDataReceived(sdData);
         dataLiveData.postValue(sdData);
         
-        // Protocol: Only trigger activity transition on alarm onset to minimize RenderThread load.
+        // Protocol: Trigger activity transition on alarm onset.
         if (sdData.alarmState >= 2 && !mWasInAlarm) {
             mWasInAlarm = true;
             bringActivityToFront();
@@ -68,7 +71,26 @@ public class AWSdService extends SdServer {
             Intent intent = new Intent();
             intent.setClassName(getPackageName(), "uk.org.openseizuredetector.aw.StartUpActivityWear");
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-            startActivity(intent);
+            
+            // #osd_260426: Bypass Android 14 Background Activity Launch (BAL) blocking
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ActivityOptions options = ActivityOptions.makeBasic();
+                // Explicitly allow BAL for this specific transition
+                options.setPendingIntentBackgroundActivityStartMode(
+                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                
+                // Wrapping in PendingIntent is the mandated way for background services to launch UI in API 34
+                PendingIntent pi = PendingIntent.getActivity(this, 0, intent, 
+                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                try {
+                    pi.send(this, 0, null, null, null, null, options.toBundle());
+                    Log.i(TAG, "BAL Bypass: Activity transition triggered via PI.");
+                } catch (PendingIntent.CanceledException e) {
+                    startActivity(intent, options.toBundle());
+                }
+            } else {
+                startActivity(intent);
+            }
         } catch (Exception e) {
             Log.e(TAG, "Foreground Transition Fail: " + e.getMessage());
         }
