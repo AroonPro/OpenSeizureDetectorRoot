@@ -10,7 +10,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
-    tools:context="uk.org.openseizuredetector.activity.main.MainActivity2">
+    tools:context="uk.org.openseizuredetector.openseizuredetector.activity.main.MainActivity2">
 
     <LinearLayout
         android:id="@+id/activity_main2_content_layout"

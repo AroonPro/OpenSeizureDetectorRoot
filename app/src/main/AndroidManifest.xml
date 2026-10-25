@@ -1,123 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="uk.org.openseizuredetector.openseizuredetector"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-
-    <uses-permission android:name="android.permission.BLUETOOTH"
-        android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
-        android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.SEND_SMS" />
-    <uses-permission android:name="android.permission.GET_TASKS" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <!--
- AD_ID seems to be added automatically as part of google play services.  We don't use ads,
-    so explicitly remove it to keep Google Play store happy.
-    -->
-    <uses-permission
-        android:name="com.google.android.gms.permission.AD_ID"
-        tools:node="remove" />
-
-    <uses-feature
-        android:name="android.hardware.telephony"
-        android:required="false" />
-    <uses-feature
-        android:name="android.hardware.bluetooth_le"
-        android:required="false" />
-
-    <!-- Declare packages we need to query for (Android 11+ requirement) -->
-    <queries>
-        <!-- PineTime Firmware Updater app -->
-        <package android:name="uk.org.openseizuredetector.pinetime" />
-    </queries>
 
     <application
-        android:name="uk.org.openseizuredetector.OsdApplication"
-        android:allowBackup="false"
-        android:icon="@drawable/logo_new_simplified_512x512"
+        android:name=".OsdApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:networkSecurityConfig="@xml/network_security_config"
-        android:theme="@style/AppTheme">
-        <activity
-            android:name=".activity.onboarding.OnboardingActivity"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OpenSeizureDetector"
+        android:usesCleartextTraffic="true"
+        tools:targetApi="31">
+
+        <!-- Forensic Backend Services -->
+        <service
+            android:name=".AWSdService"
+            android:enabled="true"
             android:exported="false"
-            android:theme="@style/AppTheme.TransparentSystemBars" />
-        <activity
-            android:name=".activity.main.MainActivity2"
+            android:foregroundServiceType="health|location|connectedDevice" />
+
+        <service
+            android:name=".AndroidSdService"
+            android:enabled="true"
             android:exported="false"
-            android:theme="@style/AppTheme.TransparentSystemBars" />
-        <!--<activity
-            android:name=".MlModelManager"
-            android:exported="false"
-            android:label="@string/title_activity_ml_model_manager"
-            android:theme="@style/AppTheme" />
-            -->
-        <activity android:name=".activity.auth.AuthenticateActivity" /> <!-- @android:style/Theme.Holo.Light" -->
+            android:foregroundServiceType="health|location|connectedDevice" />
+
+        <!-- UI Components - Separated from Backend -->
         <activity
-            android:name=".activity.bluetooth.BLEScanActivity"
-            android:theme="@style/AppTheme" />
-        <activity android:name=".activity.export.ExportDataActivity" /> <!-- android:usesCleartextTraffic="true" -->
-        <activity
-            android:name=".activity.startup.StartupActivity"
-            android:exported="true">
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity
-            android:name=".activity.settings.PrefActivity"
-            android:theme="@style/AppTheme.TransparentSystemBars"
-            android:label="OpenSeizureDetector Preferences" />
-        <activity
-            android:name="com.rohitss.uceh.UCEDefaultActivity"
-            android:process=":error_activity" />
-
-        <service
-            android:name=".SdServer"
-            android:foregroundServiceType="health|location|connectedDevice|dataSync"
-            android:exported="false" />
-
-        <activity android:name=".activity.logging.LogManagerControlActivity" />
-        <activity android:name=".activity.events.EditEventActivity" />
-        <activity android:name=".activity.remote.RemoteDbActivity" />
-        <activity android:name=".activity.events.ReportSeizureActivity" />
 
         <receiver
             android:name=".utils.BootBroadcastReceiver"
-            android:exported="true"
-            android:label="BootBroadcastReceiver">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <!-- Also receive early-boot event during Direct Boot (Android 7+) -->
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
 
-        <uses-library
-            android:name="org.apache.http.legacy"
-            android:required="false" />
     </application>
 
 </manifest>

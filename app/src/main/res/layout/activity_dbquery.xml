@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
-    tools:context="uk.org.openseizuredetector.LogManager">
+    tools:context="uk.org.openseizuredetector.openseizuredetector.LogManager">
 
     <LinearLayout
         android:id="@+id/export_data_content_layout"

@@ -762,7 +762,7 @@
     <string name="flap_alarm_title">Flap Alarm</string>
 
     <string name="pinetime_device_name_placeholder" translatable="false">PineTime</string>
-    <string name="pinetime_updater_package" translatable="false">uk.org.openseizuredetector.pinetime</string>
+    <string name="pinetime_updater_package" translatable="false">uk.org.openseizuredetector.openseizuredetector.pinetime</string>
     <string name="pinetime_device_display_format">✓ %1$s\nMAC: %2$s</string>
     <string name="validating_server">Validating server...</string>
     <string name="enter_ip_address_prompt">Enter the IP address of the OpenSeizureDetector device</string>

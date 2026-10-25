@@ -1,4 +1,4 @@
-package uk.org.openseizuredetector.utils;
+package uk.org.openseizuredetector.openseizuredetector.utils;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;

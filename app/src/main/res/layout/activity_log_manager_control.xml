@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
-    tools:context="uk.org.openseizuredetector.activity.logging.LogManagerControlActivity">
+    tools:context="uk.org.openseizuredetector.openseizuredetector.activity.logging.LogManagerControlActivity">
 
     <LinearLayout
         android:id="@+id/log_manager_control_content_layout"

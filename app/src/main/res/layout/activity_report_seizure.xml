@@ -6,7 +6,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:fitsSystemWindows="true"
-    tools:context="uk.org.openseizuredetector.activity.events.ReportSeizureActivity">
+    tools:context="uk.org.openseizuredetector.openseizuredetector.activity.events.ReportSeizureActivity">
 
     <LinearLayout
         android:id="@+id/report_seizure_content_layout"

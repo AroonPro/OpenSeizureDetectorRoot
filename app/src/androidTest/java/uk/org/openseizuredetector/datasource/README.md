@@ -17,9 +17,9 @@ This folder contains device-side instrumentation tests for `SdDataSourceBLE2`.
 ## Run
 
 ```bash
-/home/graham/osd/Android_Pebble_SD/gradlew :app:connectedDebugAndroidTest --console=plain -Pandroid.testInstrumentationRunnerArguments.class=uk.org.openseizuredetector.datasource.SdDataSourceBLE2Test
+/home/graham/osd/Android_Pebble_SD/gradlew :app:connectedDebugAndroidTest --console=plain -Pandroid.testInstrumentationRunnerArguments.class=uk.org.openseizuredetector.openseizuredetector.datasource.SdDataSourceBLE2Test
 ```
 
 ```bash
-/home/graham/osd/Android_Pebble_SD/gradlew :app:connectedDebugAndroidTest --console=plain -Pandroid.testInstrumentationRunnerArguments.class=uk.org.openseizuredetector.datasource.SdDataSourceBLETest
+/home/graham/osd/Android_Pebble_SD/gradlew :app:connectedDebugAndroidTest --console=plain -Pandroid.testInstrumentationRunnerArguments.class=uk.org.openseizuredetector.openseizuredetector.datasource.SdDataSourceBLETest
 ```

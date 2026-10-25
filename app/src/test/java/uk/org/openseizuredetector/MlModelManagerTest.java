@@ -26,7 +26,7 @@ import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 
 import androidx.preference.PreferenceManager;
-import uk.org.openseizuredetector.alg.MlModelManager;
+import uk.org.openseizuredetector.openseizuredetector.alg.MlModelManager;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 33)

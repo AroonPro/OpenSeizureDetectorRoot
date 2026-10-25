@@ -52,8 +52,8 @@ functionality of V2.5.x:
 - SdDataSourcePebble - pebble watch data source
 - SdDataSourceNetwork - actively request data from the web interface of another
                         OpenSeizureDetector instance.
-These will be packages uk.org.openseizuredetector.datasource.pebble and
-uk.org.openseizuredetector.datasource.network
+These will be packages uk.org.openseizuredetector.openseizuredetector.datasource.pebble and
+uk.org.openseizuredetector.openseizuredetector.datasource.network
 
 Future data sources will be:
 - SdDataSourceGarmin - uses a Garmin ConnectIQ smart watch.

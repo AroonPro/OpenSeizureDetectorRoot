@@ -16,8 +16,8 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import androidx.preference.PreferenceManager;
-import uk.org.openseizuredetector.alg.SdAlgFall;
-import uk.org.openseizuredetector.data.SdData;
+import uk.org.openseizuredetector.openseizuredetector.alg.SdAlgFall;
+import uk.org.openseizuredetector.openseizuredetector.data.SdData;
 
 /**
  * Unit tests for SdAlgFall (Fall detection algorithm).
@@ -168,7 +168,7 @@ public class SdAlgFallTest {
         // No fall should be detected: processSdData returns OK and fallAlgState (set by the
         // caller SeizureDetector in production) is derived from the return value.
         assertNotEquals("Normal movement should not return ALARM state",
-                uk.org.openseizuredetector.data.AlarmState.ALARM, result);
+                uk.org.openseizuredetector.openseizuredetector.data.AlarmState.ALARM, result);
 
         // For constant 1000 mg data the min and max in any window should both equal 1000
         assertEquals("mFallWindowMin should equal the constant value", 1000.0, mSdData.mFallWindowMin, 0.01);
@@ -198,7 +198,7 @@ public class SdAlgFallTest {
         // processSdData() returns ALARM when a fall is detected.
         // SeizureDetector stores this return value in sdData.fallAlgState.
         assertEquals("Fall pattern should return ALARM",
-                uk.org.openseizuredetector.data.AlarmState.ALARM, result);
+                uk.org.openseizuredetector.openseizuredetector.data.AlarmState.ALARM, result);
     }
 
     /**
@@ -215,7 +215,7 @@ public class SdAlgFallTest {
         assertEquals("mFallWindowMin should be ~300", 300.0, mSdData.mFallWindowMin, 1.0);
         assertEquals("mFallWindowMax should be ~300", 300.0, mSdData.mFallWindowMax, 1.0);
         assertNotEquals("Low-only acceleration should not return ALARM",
-                uk.org.openseizuredetector.data.AlarmState.ALARM, result);
+                uk.org.openseizuredetector.openseizuredetector.data.AlarmState.ALARM, result);
     }
 
     /**
@@ -232,7 +232,7 @@ public class SdAlgFallTest {
         assertEquals("mFallWindowMin should be ~2500", 2500.0, mSdData.mFallWindowMin, 1.0);
         assertEquals("mFallWindowMax should be ~2500", 2500.0, mSdData.mFallWindowMax, 1.0);
         assertNotEquals("High-only acceleration should not return ALARM",
-                uk.org.openseizuredetector.data.AlarmState.ALARM, result);
+                uk.org.openseizuredetector.openseizuredetector.data.AlarmState.ALARM, result);
     }
 
     /**
@@ -255,7 +255,7 @@ public class SdAlgFallTest {
                 -1.0, mSdData.mFallWindowMax, 0.001);
         // No fall detected when no data was processed
         assertNotEquals("Should not return ALARM when no data processed",
-                uk.org.openseizuredetector.data.AlarmState.ALARM, result);
+                uk.org.openseizuredetector.openseizuredetector.data.AlarmState.ALARM, result);
     }
 }
 

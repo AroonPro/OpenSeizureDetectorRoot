@@ -5,8 +5,6 @@ function get_settings() {
 
 
 function populate_settings(dataObj) {
-   //var dataObj = JSON.parse(dataStr);
-   //alert (dataStr);
    var alarmFreqMin = dataObj['alarmFreqMin'];
    var alarmFreqMax = dataObj['alarmFreqMax'];
    var alarmThresh = dataObj['alarmThresh'];
@@ -23,11 +21,11 @@ function populate_settings(dataObj) {
               + "alarm Ratio Threshold = "+alarmRatioThresh+" (/10)<br/>"
               + "warn Time = "+warnTime+" sec. <br/>"
               + "alarm Time = "+alarmTime+" sec. <br/>"
-              + "Pebble Battery = "+batteryPc+" %. <br/>"
+              + "Battery = "+batteryPc+" %. <br/>"
               ;
    $("#sdSettings").html(htmlStr);
 
-   $("#pebStat3").html("Pebble Battery Charge = "+batteryPc+" %<br/>");
+   $("#pebStat3").html("Battery Charge = "+batteryPc+" %<br/>");
 
    bgCol = "blue";
    if (batteryPc<30) bgCol = "orange";
@@ -41,8 +39,6 @@ function get_data() {
 };
 
 function process_data(dataObj) {
-   //var dataObj = JSON.parse(dataStr);
-   //alert (dataStr);
    var timeStr = dataObj['Time'];
    var maxFreq = dataObj['maxFreq'];
    var maxVal = dataObj['maxVal'];
@@ -52,7 +48,8 @@ function process_data(dataObj) {
    var alarmPhrase = dataObj['alarmPhrase'];
    var pebCon = dataObj['pebCon'];
    var pebAppRun = dataObj['pebAppRun'];
-   $("#debugInfo").html(dataStr);
+
+   $("#debugInfo").html(JSON.stringify(dataObj));
    $("#maxFreq").html("Max Freq = "+maxFreq);
    $("#maxVal").html("Max Val = "+maxVal);
    $("#specPow").html("Spec Pow = "+specPow);
@@ -76,32 +73,30 @@ function process_data(dataObj) {
            break;
    }
 
-   if (typeof alarmPhrase == 'undefined')
+   if (typeof alarmPhrase == 'undefined' || alarmPhrase == "")
            $("#benStat").css("background-color","orange");
 
    switch(pebCon) {
       case false:
-          $("#pebStat1").html("*** Pebble Watch Not Connected ***")
+          $("#pebStat1").html("*** Watch Not Connected ***")
                       .css("background-color","red");
           break;
       case true:
-          $("#pebStat1").html("Pebble Watch Connected OK")
+          $("#pebStat1").html("Watch Connected OK")
                       .css("background-color","blue");
           break;
    }
 
    switch(pebAppRun) {
       case false:
-          $("#pebStat2").html("*** Pebble Watch App Not Running ***")
+          $("#pebStat2").html("*** Watch App Not Running ***")
                       .css("background-color","red");
           break;
       case true:
-          $("#pebStat2").html("Pebble Watch App Running OK")
+          $("#pebStat2").html("Watch App Running OK")
                       .css("background-color","blue");
           break;
    }
-          
-
 };
 
 // Request spectrum from the server.
@@ -110,8 +105,6 @@ function get_spectrum() {
 };
 
 function process_spectrum(dataObj) {
-   //var dataObj = JSON.parse(dataStr);
-
    var chartData = {
        labels:["1","2","3","4","5","6","7","8","9","10"],
        datasets: [
@@ -127,8 +120,7 @@ function process_spectrum(dataObj) {
    var ctx1 = $("#specChart1").get(0).getContext("2d");
    ctx1.canvas.width = chartWidth;
    ctx1.canvas.height = chartHeight;
-   var specChart1 = new Chart(ctx1);
-    //alert(JSON.stringify(chartData));
+   // Note: Chart.js legacy version usage
     var chartOpts = {
 		     animation: false,
 		     showScale: true,
@@ -142,13 +134,12 @@ function process_spectrum(dataObj) {
    var ctx2 = $("#specChart2").get(0).getContext("2d");
    ctx2.canvas.width = chartWidth;
    ctx2.canvas.height = chartHeight;
-   var specChart2 = new Chart(ctx2);
-    var chartOpts = {
+    var chartOpts2 = {
 		     animation: false,
 		     showScale: true,
 		     scaleOverride: false,
 		     };
-    var lineChart2 = new Chart(ctx2).Line(chartData,chartOpts);
+    var lineChart2 = new Chart(ctx2).Line(chartData,chartOpts2);
 }
 
 
@@ -173,9 +164,9 @@ $(document).ready(function() {
    get_settings();
    get_data();
    get_spectrum();
-   setInterval("get_data();",2000);
-   setInterval("get_settings();",10000);
-   setInterval("get_spectrum();",5000);
+   setInterval(get_data, 2000);
+   setInterval(get_settings, 10000);
+   setInterval(get_spectrum, 5000);
    $("#muteButton").click(toggleMute);
    $("#acceptButton").click(acceptAlarm);
 });

@@ -9,7 +9,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
-import uk.org.openseizuredetector.data.SdDataHistory;
+import uk.org.openseizuredetector.openseizuredetector.data.SdDataHistory;
 
 /**
  * Unit tests verifying that fall detection window statistics are correctly recorded

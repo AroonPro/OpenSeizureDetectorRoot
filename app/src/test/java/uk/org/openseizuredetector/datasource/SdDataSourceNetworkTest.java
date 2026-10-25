@@ -1,4 +1,4 @@
-package uk.org.openseizuredetector.datasource;
+package uk.org.openseizuredetector.openseizuredetector.datasource;
 
 import static org.junit.Assert.*;
 import static org.robolectric.Shadows.shadowOf;
@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 
-import uk.org.openseizuredetector.data.SdData;
+import uk.org.openseizuredetector.openseizuredetector.data.SdData;
 
 @RunWith(org.robolectric.RobolectricTestRunner.class)
 @Config(sdk = 33)
@@ -162,7 +162,7 @@ public class SdDataSourceNetworkTest {
     @Test
     public void testSdDataJsonRoundTrip() throws Exception {
         // Create SdData and populate required fields
-        uk.org.openseizuredetector.data.SdData sd0 = new uk.org.openseizuredetector.data.SdData();
+        uk.org.openseizuredetector.openseizuredetector.data.SdData sd0 = new uk.org.openseizuredetector.openseizuredetector.data.SdData();
         sd0.maxVal = 200;
         sd0.maxFreq = 20;
         sd0.specPower = 100;
@@ -215,7 +215,7 @@ public class SdDataSourceNetworkTest {
         sd0.simpleSpec = new int[]{1,2,3,4,5,6,7,8,9,10};
 
         String json = sd0.toJSON(false);
-        uk.org.openseizuredetector.data.SdData sd1 = new uk.org.openseizuredetector.data.SdData();
+        uk.org.openseizuredetector.openseizuredetector.data.SdData sd1 = new uk.org.openseizuredetector.openseizuredetector.data.SdData();
         sd1.fromJSON(json);
 
         assertEquals(sd0.maxVal, sd1.maxVal);

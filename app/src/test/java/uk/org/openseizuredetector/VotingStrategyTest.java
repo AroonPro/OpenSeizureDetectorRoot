@@ -6,8 +6,8 @@ import static org.junit.Assert.*;
 import java.util.ArrayList;
 import java.util.List;
 
-import uk.org.openseizuredetector.alg.AlgorithmResult;
-import uk.org.openseizuredetector.alg.VotingStrategy;
+import uk.org.openseizuredetector.openseizuredetector.alg.AlgorithmResult;
+import uk.org.openseizuredetector.openseizuredetector.alg.VotingStrategy;
 
 /**
  * Unit tests for VotingStrategy class.

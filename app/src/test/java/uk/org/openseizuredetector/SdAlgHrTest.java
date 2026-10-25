@@ -14,8 +14,8 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import androidx.preference.PreferenceManager;
-import uk.org.openseizuredetector.alg.SdAlgHr;
-import uk.org.openseizuredetector.activity.settings.PrefActivity;
+import uk.org.openseizuredetector.openseizuredetector.alg.SdAlgHr;
+import uk.org.openseizuredetector.openseizuredetector.activity.settings.PrefActivity;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 33)

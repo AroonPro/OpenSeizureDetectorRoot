@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OSD SSH Setup</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #121212; color: #e0e0e0; }
+        .container { max-width: 600px; margin: auto; background: #1e1e1e; padding: 20px; border-radius: 8px; }
+        h1 { color: #bb86fc; font-size: 1.5em; }
+        label { display: block; margin-top: 10px; color: #03dac6; font-size: 0.9em; }
+        input, textarea { width: 100%; padding: 10px; margin-top: 5px; background: #2c2c2c; border: 1px solid #333; color: white; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; margin-top: 20px; background: #6200ee; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #3700b3; }
+        .github-section { border-top: 1px solid #333; margin-top: 30px; padding-top: 20px; }
+        .status { margin-top: 15px; padding: 10px; border-radius: 4px; display: none; }
+        .success { background: #2e7d32; display: block; }
+        .error { background: #c62828; display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>OSD Remote Setup</h1>
+        <p style="font-size: 0.8em; color: #888;">Configure your Watch SSH tunnel and settings from your phone.</p>
+
+        <div id="setupForm">
+            <label>SSH Host</label>
+            <input type="text" id="host" placeholder="e.g. 1.2.3.4">
+
+            <label>SSH Port</label>
+            <input type="number" id="port" value="22">
+
+            <label>Username</label>
+            <input type="text" id="user" placeholder="pi">
+
+            <label>Tunnels (Semicolon separated)</label>
+            <textarea id="tunnels" rows="2" placeholder="R28080:127.0.0.1:8080; L8123:localhost:8123"></textarea>
+
+            <label>SSH Private Key (RSA/ED25519)</label>
+            <textarea id="keyContent" rows="6" placeholder="-----BEGIN RSA PRIVATE KEY-----..."></textarea>
+
+            <label>Webhook URL</label>
+            <input type="text" id="webhookUrl" placeholder="https://...">
+
+            <button onclick="applyConfig()">Apply to Watch</button>
+        </div>
+
+        <div class="github-section">
+            <h1>GitHub Onboarding</h1>
+            <label>Config Raw URL (JSON)</label>
+            <input type="text" id="ghUrl" placeholder="https://raw.githubusercontent.com/.../config.json">
+            <button style="background: #333;" onclick="fetchFromGithub()">Fetch & Load</button>
+        </div>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+
+        function showStatus(msg, isError) {
+            statusDiv.innerText = msg;
+            statusDiv.className = 'status ' + (isError ? 'error' : 'success');
+        }
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/ssh_setup');
+                const data = await response.json();
+                if (data.host) document.getElementById('host').value = data.host;
+                if (data.port) document.getElementById('port').value = data.port;
+                if (data.user) document.getElementById('user').value = data.user;
+                if (data.webhookUrl) document.getElementById('webhookUrl').value = data.webhookUrl;
+                if (data.tunnels) document.getElementById('tunnels').value = data.tunnels.join('; ');
+            } catch (e) { console.error('Load fail', e); }
+        }
+
+        async function applyConfig() {
+            const config = {
+                host: document.getElementById('host').value.trim(),
+                port: parseInt(document.getElementById('port').value),
+                user: document.getElementById('user').value.trim(),
+                tunnels: document.getElementById('tunnels').value.split(';').map(t => t.trim()).filter(t => t),
+                keyContent: document.getElementById('keyContent').value.trim(),
+                webhookUrl: document.getElementById('webhookUrl').value.trim()
+            };
+
+            try {
+                const response = await fetch('/ssh_setup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                const result = await response.json();
+                showStatus(result.msg, result.status === 'error');
+            } catch (e) {
+                showStatus('Failed to connect to watch: ' + e.message, true);
+            }
+        }
+
+        async function fetchFromGithub() {
+            const url = document.getElementById('ghUrl').value.trim();
+            if (!url) return showStatus('Enter a URL first', true);
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                if (data.host) document.getElementById('host').value = data.host;
+                if (data.user) document.getElementById('user').value = data.user;
+                if (data.tunnels) document.getElementById('tunnels').value = Array.isArray(data.tunnels) ? data.tunnels.join('; ') : data.tunnels;
+                if (data.keyContent) document.getElementById('keyContent').value = data.keyContent;
+                showStatus('Config loaded from GitHub. Review and press Apply.', false);
+            } catch (e) {
+                showStatus('GitHub Fetch Failed: ' + e.message, true);
+            }
+        }
+
+        window.onload = loadConfig;
+    </script>
+</body>
+</html>

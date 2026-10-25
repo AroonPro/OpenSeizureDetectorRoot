@@ -52,7 +52,7 @@ import java.util.Locale;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
-import uk.org.openseizuredetector.R;
+import uk.org.openseizuredetector.openseizuredetector.R;
 
 /**
  * <b></b>

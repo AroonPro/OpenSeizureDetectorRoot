@@ -15,8 +15,8 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import androidx.preference.PreferenceManager;
-import uk.org.openseizuredetector.alg.SdAlgOsd;
-import uk.org.openseizuredetector.data.SdData;
+import uk.org.openseizuredetector.openseizuredetector.alg.SdAlgOsd;
+import uk.org.openseizuredetector.openseizuredetector.data.SdData;
 
 /**
  * Unit tests for SdAlgOsd (OpenSeizureDetector algorithm).

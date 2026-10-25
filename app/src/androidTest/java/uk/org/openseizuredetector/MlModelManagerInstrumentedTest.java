@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import androidx.preference.PreferenceManager;
-import uk.org.openseizuredetector.alg.MlModelManager;
+import uk.org.openseizuredetector.openseizuredetector.alg.MlModelManager;
 
 @RunWith(AndroidJUnit4.class)
 public class MlModelManagerInstrumentedTest {

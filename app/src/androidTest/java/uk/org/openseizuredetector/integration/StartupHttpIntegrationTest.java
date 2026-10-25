@@ -1,4 +1,4 @@
-package uk.org.openseizuredetector.integration;
+package uk.org.openseizuredetector.openseizuredetector.integration;
 
 import static org.junit.Assert.*;
 
@@ -32,8 +32,8 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
-import uk.org.openseizuredetector.activity.startup.StartupActivity;
-import uk.org.openseizuredetector.activity.main.MainActivity2;
+import uk.org.openseizuredetector.openseizuredetector.activity.startup.StartupActivity;
+import uk.org.openseizuredetector.openseizuredetector.activity.main.MainActivity2;
 import androidx.preference.PreferenceManager;
 
 /**

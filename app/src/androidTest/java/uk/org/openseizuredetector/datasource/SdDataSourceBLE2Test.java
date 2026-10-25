@@ -1,4 +1,4 @@
-package uk.org.openseizuredetector.datasource;
+package uk.org.openseizuredetector.openseizuredetector.datasource;
 
 import static org.junit.Assert.assertArrayEquals;
 
@@ -15,7 +15,7 @@ import org.junit.runner.RunWith;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
-import uk.org.openseizuredetector.data.SdData;
+import uk.org.openseizuredetector.openseizuredetector.data.SdData;
 
 @RunWith(AndroidJUnit4.class)
 public class SdDataSourceBLE2Test {

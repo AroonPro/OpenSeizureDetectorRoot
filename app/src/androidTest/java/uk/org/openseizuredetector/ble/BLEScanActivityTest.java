@@ -1,4 +1,4 @@
-package uk.org.openseizuredetector.ble;
+package uk.org.openseizuredetector.openseizuredetector.ble;
 
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
@@ -22,8 +22,8 @@ import org.junit.runner.RunWith;
 import java.util.Arrays;
 import java.util.List;
 
-import uk.org.openseizuredetector.R;
-import uk.org.openseizuredetector.activity.bluetooth.BLEScanActivity;
+import uk.org.openseizuredetector.openseizuredetector.R;
+import uk.org.openseizuredetector.openseizuredetector.activity.bluetooth.BLEScanActivity;
 
 @RunWith(AndroidJUnit4.class)
 public class BLEScanActivityTest {

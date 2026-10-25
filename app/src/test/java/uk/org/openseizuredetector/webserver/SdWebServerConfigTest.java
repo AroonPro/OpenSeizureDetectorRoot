@@ -1,4 +1,4 @@
-package uk.org.openseizuredetector.webserver;
+package uk.org.openseizuredetector.openseizuredetector.webserver;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -28,9 +28,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 import fi.iki.elonen.NanoHTTPD;
-import uk.org.openseizuredetector.SdServer;
-import uk.org.openseizuredetector.data.SdData;
-import uk.org.openseizuredetector.utils.PersistentFileLogger;
+import uk.org.openseizuredetector.openseizuredetector.SdServer;
+import uk.org.openseizuredetector.openseizuredetector.data.SdData;
+import uk.org.openseizuredetector.openseizuredetector.utils.PersistentFileLogger;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28)
